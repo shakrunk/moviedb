@@ -12,6 +12,10 @@
     Audits the database for movies matching the search term.
 
 .EXAMPLE
+    Get-MovieEntry -Detailed
+    Audits the database and displays all available columns in the table.
+
+.EXAMPLE
     Add-MovieEntry -Title 'Dune' -Rating 5 -WatchDate '2024-03-01'
     Adds an entry silently using explicit parameters.
 
@@ -52,12 +56,13 @@ function Invoke-ChoiceMenu {
     .DESCRIPTION
         Utilizes the [System.Console] class to capture raw keystrokes and redraw the terminal buffer,
         providing a smooth selection interface without requiring native PromptForChoice windowpopups.
+        Supports graceful exit via the Escape key and alphanumeric quick-jumping/auto-submission.
     .PARAMETER Prompt
         The instructional text displayed above the menu choices.
     .PARAMETER Choices
         An array of string options presented to the user.
     .OUTPUTS
-        Returns the selected string from the Choices array.
+        Returns the selected string from the Choices array, or $null if cancelled.
     #>
     [CmdletBinding()]
     param (
@@ -72,7 +77,7 @@ function Invoke-ChoiceMenu {
 
     while ($true) {
         [Console]::SetCursorPosition(0, $cursorTop)
-        Write-Host $Prompt -ForegroundColor Cyan
+        Write-Host "$Prompt (Esc to cancel)" -ForegroundColor Cyan
 
         for ($i = 0; $i -lt $Choices.Count; $i++) {
             if ($i -eq $selectedIndex) {
@@ -82,13 +87,34 @@ function Invoke-ChoiceMenu {
             }
         }
 
-        $key = [Console]::ReadKey($true).Key
-        if ($key -eq 'UpArrow') {
+        $keyInfo = [Console]::ReadKey($true)
+        $key = $keyInfo.Key
+        $char = $keyInfo.KeyChar
+
+        if ($key -eq 'Escape') {
+            try { [Console]::CursorVisible = $true } catch {}
+            Write-Host "`nOperation cancelled by user.`n" -ForegroundColor Yellow
+            return $null
+        } elseif ($key -eq 'UpArrow') {
             if ($selectedIndex -gt 0) { $selectedIndex-- }
         } elseif ($key -eq 'DownArrow') {
             if ($selectedIndex -lt ($Choices.Count - 1)) { $selectedIndex++ }
         } elseif ($key -eq 'Enter') {
             break
+        } elseif ($char -match '^[a-zA-Z0-9]$') {
+            # Jump to the first choice starting with the typed character
+            for ($i = 0; $i -lt $Choices.Count; $i++) {
+                if ($Choices[$i] -match "^$char") {
+                    $selectedIndex = $i
+                    # Auto-submit if a number was typed and matched
+                    if ($char -match '^[0-9]$') {
+                        break
+                    }
+                }
+            }
+            if ($char -match '^[0-9]$' -and $Choices[$selectedIndex] -match "^$char") {
+                break
+            }
         }
     }
 
@@ -107,16 +133,22 @@ function Get-MovieEntry {
         Includes Nerd Font star ligatures for quick visual parsing of ratings.
     .PARAMETER SearchTerm
         An optional string to filter the datastore by Title, Director, or Genre using regex matching.
+    .PARAMETER Detailed
+        Switch to bypass the summarized view and display all available columns in the table.
     .EXAMPLE
         Get-MovieEntry
         Returns all tracked movies.
     .EXAMPLE
         Get-MovieEntry -SearchTerm "Sci-Fi"
         Returns only entries matching the genre or title "Sci-Fi".
+    .EXAMPLE
+        Get-MovieEntry -Detailed
+        Expands the output table to include WatchDate, Runtime, Studio, Actors, and Notes.
     #>
     [CmdletBinding()]
     param (
-        [string]$SearchTerm
+        [string]$SearchTerm,
+        [switch]$Detailed
     )
 
     Initialize-MovieDatabase
@@ -131,17 +163,21 @@ function Get-MovieEntry {
         }
     }
 
-    $Query | Select-Object `
-        @{Name="Title"; Expression={$_.Title}},
-        @{Name="Year"; Expression={
-            if ($_.ReleaseDate -match '(\d{4})') { $Matches[1] } else { "N/A" }
-        }},
-        @{Name="Rating"; Expression={
-            if ($_.Rating) { "★" * $_.Rating + "☆" * (5 - $_.Rating) } else { "     " }
-        }},
-        @{Name="Director"; Expression={$_.Director}},
-        @{Name="Genre"; Expression={$_.Genre}} |
-        Format-Table -AutoSize
+    if ($Detailed) {
+        $Query | Format-Table -AutoSize
+    } else {
+        $Query | Select-Object `
+            @{Name="Title"; Expression={$_.Title}},
+            @{Name="Year"; Expression={
+                if ($_.ReleaseDate -match '(\d{4})') { $Matches[1] } else { "N/A" }
+            }},
+            @{Name="Rating"; Expression={
+                if ($_.Rating) { "★" * $_.Rating + "☆" * (5 - $_.Rating) } else { "     " }
+            }},
+            @{Name="Director"; Expression={$_.Director}},
+            @{Name="Genre"; Expression={$_.Genre}} |
+            Format-Table -AutoSize
+    }
 }
 
 function Add-MovieEntry {
@@ -200,6 +236,8 @@ function Add-MovieEntry {
 
         # Attempt Online Metadata Fetch
         $FetchOnline = Invoke-ChoiceMenu -Prompt "Attempt to fetch metadata online?" -Choices @("Yes", "No")
+        if (-not $FetchOnline) { return }
+
         if ($FetchOnline -eq "Yes") {
             try {
                 Write-Host "Searching iTunes Movie API..." -ForegroundColor DarkGray
@@ -214,6 +252,7 @@ function Add-MovieEntry {
                     }
                     $options += "None of these"
                     $selection = Invoke-ChoiceMenu -Prompt "Select the matching movie:" -Choices $options
+                    if (-not $selection) { return }
 
                     if ($selection -ne "None of these") {
                         $idx = [array]::IndexOf($options, $selection)
@@ -238,6 +277,7 @@ function Add-MovieEntry {
 
         $RatingChoices = @("Skip", "1 - Terrible", "2 - Bad", "3 - Okay", "4 - Good", "5 - Masterpiece")
         $ratingSelection = Invoke-ChoiceMenu -Prompt "Select Rating:" -Choices $RatingChoices
+        if (-not $ratingSelection) { return }
         if ($ratingSelection -ne "Skip") { $Rating = [int]($ratingSelection.Substring(0,1)) }
 
         # Helper to show default value if metadata was fetched
@@ -327,6 +367,8 @@ function Update-MovieEntry {
         }
 
         $selectionString = Invoke-ChoiceMenu -Prompt "Multiple entries found for '$Title'. Select the target record:" -Choices $menuOptions
+        if (-not $selectionString) { return }
+
         $selectedIndex = [array]::IndexOf($menuOptions, $selectionString)
         $SelectedRecord = $TargetRecords[$selectedIndex]
     }
@@ -334,14 +376,28 @@ function Update-MovieEntry {
     # Property Selection Menu
     if (-not $PSBoundParameters.ContainsKey('Property')) {
         $Properties = @('Rating', 'WatchDate', 'ReleaseDate', 'Runtime', 'Genre', 'Director', 'Studio', 'Actors', 'Notes')
-        $Property = Invoke-ChoiceMenu -Prompt "Select property to update for '$Title':" -Choices $Properties
+
+        # Build display choices showing the current value of each property
+        $DisplayChoices = $Properties | ForEach-Object {
+            $val = $SelectedRecord.$_
+            if ($null -eq $val -or $val -eq "") { $val = "<empty>" }
+            "$_ (Current: $val)"
+        }
+
+        $ChoiceStr = Invoke-ChoiceMenu -Prompt "Select property to update for '$($SelectedRecord.Title)':" -Choices $DisplayChoices
+        if (-not $ChoiceStr) { return }
+
+        $selectedIndex = [array]::IndexOf($DisplayChoices, $ChoiceStr)
+        $Property = $Properties[$selectedIndex]
     }
 
     if (-not $PSBoundParameters.ContainsKey('Value')) {
-        $Value = Read-Host "New value for $Property"
+        $currentVal = $SelectedRecord.$Property
+        if ($null -eq $currentVal -or $currentVal -eq "") { $currentVal = "<empty>" }
+
+        $Value = Read-Host "New value for $Property (Current: $currentVal)"
     }
 
-    # Apply Type Casting & Update
     if ($Property -eq 'Rating') {
         $SelectedRecord.$Property = if ([string]::IsNullOrWhiteSpace($Value)) { $null } else { [int]$Value }
     } else {
@@ -349,7 +405,7 @@ function Update-MovieEntry {
     }
 
     $RawJson | ConvertTo-Json -Depth 10 | Set-Content -Path $Global:MovieDbPath
-    Write-Host "Successfully updated $Property for '$Title'." -ForegroundColor Green
+    Write-Host "Successfully updated $Property for '$($SelectedRecord.Title)'." -ForegroundColor Green
 }
 
 function Copy-MovieDbToClipboard {
