@@ -8,6 +8,10 @@
     as well as fully interactive wizards when executed without parameters.
 
 .EXAMPLE
+    Get-MovieEntry -SearchTerm 'Nolan'
+    Audits the database for movies matching the search term.
+
+.EXAMPLE
     Add-MovieEntry -Title 'Dune' -Rating 5 -WatchDate '2024-03-01'
     Adds an entry silently using explicit parameters.
 
@@ -20,8 +24,8 @@
     Updates the rating for Inception directly.
 
 .EXAMPLE
-    Update-MovieEntry
-    Triggers the interactive wizard to update a movie property, including duplicate resolution.
+    Update-MovieEntry Searching
+    Triggers the interactive wizard to update a movie property, automatically mapping "Searching" to the title and providing a CLI menu for the property selection.
 #>
 
 $Global:MovieDbPath = Join-Path $PSScriptRoot "movies.json"
@@ -38,6 +42,87 @@ function Initialize-MovieDatabase {
     if (-not (Test-Path $Path)) {
         Throw "Database file not found at $Path. Please ensure the baseline movies.json is present."
     }
+}
+
+function Invoke-ChoiceMenu {
+    <#
+    .SYNOPSIS
+        Internal helper for rendering an interactive, arrow-key driven CLI menu.
+    #>
+    param (
+        [Parameter(Mandatory=$true)] [string]$Prompt,
+        [Parameter(Mandatory=$true)] [string[]]$Choices
+    )
+    $selectedIndex = 0
+    $cursorTop = [Console]::CursorTop
+
+    # Hide terminal cursor for cleaner menu rendering
+    try { [Console]::CursorVisible = $false } catch {}
+
+    while ($true) {
+        [Console]::SetCursorPosition(0, $cursorTop)
+        Write-Host $Prompt -ForegroundColor Cyan
+
+        for ($i = 0; $i -lt $Choices.Count; $i++) {
+            if ($i -eq $selectedIndex) {
+                Write-Host "  ❯ $($Choices[$i])  " -ForegroundColor Cyan
+            } else {
+                Write-Host "    $($Choices[$i])  " -ForegroundColor DarkGray
+            }
+        }
+
+        $key = [Console]::ReadKey($true).Key
+        if ($key -eq 'UpArrow') {
+            if ($selectedIndex -gt 0) { $selectedIndex-- }
+        } elseif ($key -eq 'DownArrow') {
+            if ($selectedIndex -lt ($Choices.Count - 1)) { $selectedIndex++ }
+        } elseif ($key -eq 'Enter') {
+            break
+        }
+    }
+
+    # Restore cursor and log selection
+    try { [Console]::CursorVisible = $true } catch {}
+    Write-Host "Selected: $($Choices[$selectedIndex])`n" -ForegroundColor Green
+    return $Choices[$selectedIndex]
+}
+
+function Get-MovieEntry {
+    <#
+    .SYNOPSIS
+        Retrieves and audits movie entries from the data store.
+    .DESCRIPTION
+        Provides a read-only audit view of the movies.json database.
+        Includes Nerd Font ligatures for rating visualization.
+    #>
+    [CmdletBinding()]
+    param (
+        [string]$SearchTerm
+    )
+
+    Initialize-MovieDatabase
+    $RawJson = Get-Content -Raw -Path $Global:MovieDbPath | ConvertFrom-Json
+
+    $Query = $RawJson.log
+    if ($SearchTerm) {
+        $Query = $Query | Where-Object {
+            $_.Title -match $SearchTerm -or
+            $_.Director -match $SearchTerm -or
+            $_.Genre -match $SearchTerm
+        }
+    }
+
+    $Query | Select-Object `
+        @{Name="Title"; Expression={$_.Title}},
+        @{Name="Year"; Expression={
+            if ($_.ReleaseDate -match '(\d{4})') { $Matches[1] } else { "N/A" }
+        }},
+        @{Name="Rating"; Expression={
+            if ($_.Rating) { "★" * $_.Rating + "☆" * (5 - $_.Rating) } else { "     " }
+        }},
+        @{Name="Director"; Expression={$_.Director}},
+        @{Name="Genre"; Expression={$_.Genre}} |
+        Format-Table -AutoSize
 }
 
 function Add-MovieEntry {
@@ -74,8 +159,9 @@ function Add-MovieEntry {
             return
         }
 
-        $RatingInput = Read-Host "Rating (1-5) [Skip]"
-        if ($RatingInput -match '^[1-5]$') { $Rating = [int]$RatingInput }
+        $RatingChoices = @("Skip", "1 - Terrible", "2 - Bad", "3 - Okay", "4 - Good", "5 - Masterpiece")
+        $ratingSelection = Invoke-ChoiceMenu -Prompt "Select Rating:" -Choices $RatingChoices
+        if ($ratingSelection -ne "Skip") { $Rating = [int]($ratingSelection.Substring(0,1)) }
 
         $WatchDate   = Read-Host "WatchDate (YYYY-MM-DD) [Skip]"
         $ReleaseDate = Read-Host "ReleaseDate (YYYY-MM-DD) [Skip]"
@@ -93,7 +179,7 @@ function Add-MovieEntry {
 
     $NewRecord = [PSCustomObject]@{
         Title       = $Title
-        Rating      = if ($PSBoundParameters.ContainsKey('Rating') -or $RatingInput) { $Rating } else { $null }
+        Rating      = if ($PSBoundParameters.ContainsKey('Rating') -or $ratingSelection -ne "Skip") { $Rating } else { $null }
         WatchDate   = $WatchDate
         ReleaseDate = $ReleaseDate
         Runtime     = $Runtime
@@ -120,7 +206,7 @@ function Update-MovieEntry {
     #>
     [CmdletBinding()]
     param (
-        [string]$Title,
+        [Parameter(Position = 0)] [string]$Title,
         [ValidateSet('Rating', 'WatchDate', 'ReleaseDate', 'Runtime', 'Genre', 'Director', 'Studio', 'Actors', 'Notes')] [string]$Property,
         $Value
     )
@@ -144,29 +230,22 @@ function Update-MovieEntry {
 
     $SelectedRecord = $TargetRecords[0]
 
-    # Duplicate Resolution Handling
+    # Duplicate Resolution Menu
     if ($TargetRecords.Count -gt 1) {
-        Write-Host "`nMultiple entries found for '$Title'. Please select the target record:" -ForegroundColor Yellow
-        for ($i = 0; $i -lt $TargetRecords.Count; $i++) {
-            $rec = $TargetRecords[$i]
-            $year = if ($rec.ReleaseDate) { $rec.ReleaseDate } else { "Unknown Year" }
-            $dir = if ($rec.Director) { $rec.Director } else { "Unknown Director" }
-            Write-Host "  [$i] $Title ($year) - Director: $dir"
+        $menuOptions = $TargetRecords | ForEach-Object {
+            $year = if ($_.ReleaseDate -match '(\d{4})') { $Matches[1] } else { "Unknown" }
+            "$($_.Title) ($year) - Director: $($_.Director)"
         }
 
-        $Selection = Read-Host "`nEnter selection number"
-        if ($Selection -match '^\d+$' -and [int]$Selection -lt $TargetRecords.Count) {
-            $SelectedRecord = $TargetRecords[[int]$Selection]
-        } else {
-            Write-Error "Invalid selection. Aborting."
-            return
-        }
+        $selectionString = Invoke-ChoiceMenu -Prompt "Multiple entries found for '$Title'. Select the target record:" -Choices $menuOptions
+        $selectedIndex = [array]::IndexOf($menuOptions, $selectionString)
+        $SelectedRecord = $TargetRecords[$selectedIndex]
     }
 
-    # Continue Interactive Fallback for Property/Value
+    # Property Selection Menu
     if (-not $PSBoundParameters.ContainsKey('Property')) {
-        $Property = Read-Host "Property to update (Rating, WatchDate, ReleaseDate, Runtime, Genre, Director, Studio, Actors, Notes)"
-        if ([string]::IsNullOrWhiteSpace($Property)) { return }
+        $Properties = @('Rating', 'WatchDate', 'ReleaseDate', 'Runtime', 'Genre', 'Director', 'Studio', 'Actors', 'Notes')
+        $Property = Invoke-ChoiceMenu -Prompt "Select property to update for '$Title':" -Choices $Properties
     }
 
     if (-not $PSBoundParameters.ContainsKey('Value')) {
