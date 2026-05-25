@@ -1,0 +1,303 @@
+{
+  "_metadata": {
+    "description": "Self-documenting movie and TV show data store with embedded PowerShell mutation instructions.",
+    "schema_version": "1.1.0",
+    "instructions": {
+      "context": "When the user provides this JSON file and asks to add or modify records, parse the active log. Do not rewrite the file. Instead, generate the exact PowerShell command string required to execute the change locally based on the syntax defined below.",
+      "syntax": {
+        "add_entry": "Add-MovieEntry -Title 'Movie Title' -Rating 5 -WatchDate 'YYYY-MM-DD' -ReleaseDate 'YYYY-MM-DD' -Runtime 'HH:MM:SS' -Genre 'Genre1, Genre2' -Director 'Director Name' -Studio 'Studio Name' -Actors 'Actor 1, Actor 2' -Notes 'Optional notes'",
+        "update_property": "Update-MovieEntry -Title 'Movie Title' -Property 'WatchDate' -Value 'YYYY-MM-DD'"
+      }
+    }
+  },
+  "log": [
+    {
+      "Title": "Inception",
+      "Rating": 5,
+      "WatchDate": null,
+      "ReleaseDate": "2010-07-15",
+      "Runtime": "2:28:00",
+      "Genre": "Action, Science Fiction, Adventure",
+      "Director": "Christopher Nolan",
+      "Studio": "Legendary Pictures",
+      "Actors": "Leonardo DiCaprio, Joseph Gordon-Levitt, Ken Watanabe, Tom Hardy, Elliot Page",
+      "Notes": "Mind-bending and visually stunning."
+    },
+    {
+      "Title": "Pulp Fiction",
+      "Rating": 1,
+      "WatchDate": null,
+      "ReleaseDate": "1994-09-10",
+      "Runtime": "2:34:00",
+      "Genre": "Thriller, Crime, Comedy",
+      "Director": "Quentin Tarantino",
+      "Studio": "Miramax",
+      "Actors": "John Travolta, Samuel L. Jackson, Uma Thurman, Bruce Willis, Ving Rhames",
+      "Notes": "Guess I'm not really a Tarantino fan :/"
+    },
+    {
+      "Title": "The Shawshank Redemption",
+      "Rating": 5,
+      "WatchDate": "",
+      "ReleaseDate": "9/23/1994",
+      "Runtime": "2:22:00",
+      "Genre": "Drama, Crime",
+      "Director": "Frank Darabont",
+      "Studio": "Castle Rock Entertainment",
+      "Actors": "Tim Robbins, Morgan Freeman, Bob Gunton, William Sadler, Clancy Brown",
+      "Notes": "Uplifting and emotionally resonant."
+    },
+    {
+      "Title": "The Dark Knight",
+      "Rating": 5,
+      "WatchDate": "",
+      "ReleaseDate": "7/16/2008",
+      "Runtime": "2:32:00",
+      "Genre": "Action, Crime, Thriller",
+      "Director": "Christopher Nolan",
+      "Studio": "Warner Bros. Pictures",
+      "Actors": "Christian Bale, Heath Ledger, Aaron Eckhart, Michael Caine, Maggie Gyllenhaal",
+      "Notes": "A superhero masterpiece."
+    },
+    {
+      "Title": "Forrest Gump",
+      "Rating": 2,
+      "WatchDate": "",
+      "ReleaseDate": "6/23/1994",
+      "Runtime": "2:22:00",
+      "Genre": "Comedy, Drama, Romance",
+      "Director": "Robert Zemeckis",
+      "Studio": "Paramount Pictures",
+      "Actors": "Tom Hanks, Robin Wright, Gary Sinise, Sally Field, Mykelti Williamson",
+      "Notes": "Heartwarming but a bit too sentimental for my taste.  Kinda lacks a traditional story stucture."
+    },
+    {
+      "Title": "Interstellar",
+      "Rating": 3,
+      "WatchDate": "",
+      "ReleaseDate": "11/5/2014",
+      "Runtime": "",
+      "Genre": "Adventure, Drama, Science Fiction",
+      "Director": "Christopher Nolan",
+      "Studio": "",
+      "Actors": "",
+      "Notes": "Ambitious and thought-provoking."
+    },
+    {
+      "Title": "GATTACA",
+      "Rating": 5,
+      "WatchDate": "",
+      "ReleaseDate": "1997-07-09",
+      "Runtime": "",
+      "Genre": "Science Fiction, Drama, Thriller",
+      "Director": "Andrew Niccol",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "A Bugs Life",
+      "Rating": 4,
+      "WatchDate": "",
+      "ReleaseDate": "1998-11-25",
+      "Runtime": "",
+      "Genre": "Adventure, Animation, Comedy, Family",
+      "Director": "John Lasseter",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "The Sixth Sense",
+      "Rating": null,
+      "WatchDate": "",
+      "ReleaseDate": "1999-08-06",
+      "Runtime": "",
+      "Genre": "Thriller, Mystery",
+      "Director": "M. Night Shyamalan",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "The Matrix",
+      "Rating": null,
+      "WatchDate": "",
+      "ReleaseDate": "1999-03-31",
+      "Runtime": "",
+      "Genre": "Science Fiction, Action",
+      "Director": "The Wachowskis",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "Looper",
+      "Rating": null,
+      "WatchDate": "",
+      "ReleaseDate": "2012-09-28",
+      "Runtime": "",
+      "Genre": "Science Fiction, Action",
+      "Director": "Rian Johnson",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "Upgrade",
+      "Rating": null,
+      "WatchDate": "",
+      "ReleaseDate": "2018-06-01",
+      "Runtime": "",
+      "Genre": "Science Fiction, Action",
+      "Director": "Leigh Whannell",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "Everything Everywhere All at Once",
+      "Rating": null,
+      "WatchDate": "",
+      "ReleaseDate": "2022-03-25",
+      "Runtime": "",
+      "Genre": "Science Fiction, Adventure",
+      "Director": "Daniel Kwan, Daniel Scheinert",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "Ex Machina",
+      "Rating": null,
+      "WatchDate": "",
+      "ReleaseDate": "2015-04-10",
+      "Runtime": "",
+      "Genre": "Science Fiction, Thriller",
+      "Director": "Alex Garland",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "Arrival",
+      "Rating": null,
+      "WatchDate": "",
+      "ReleaseDate": "2016-11-11",
+      "Runtime": "",
+      "Genre": "Science Fiction, Drama",
+      "Director": "Denis Villeneuve",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "Coherence",
+      "Rating": null,
+      "WatchDate": "",
+      "ReleaseDate": "2013-09-19",
+      "Runtime": "",
+      "Genre": "Science Fiction, Thriller",
+      "Director": "James Ward Byrkit",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "Triangle",
+      "Rating": null,
+      "WatchDate": "",
+      "ReleaseDate": "2009-10-16",
+      "Runtime": "",
+      "Genre": "Thriller, Mystery",
+      "Director": "Christopher Smith",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "Predestination",
+      "Rating": null,
+      "WatchDate": "",
+      "ReleaseDate": "2014-08-28",
+      "Runtime": "",
+      "Genre": "Science Fiction, Thriller",
+      "Director": "The Spierig Brothers",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "Fall",
+      "Rating": null,
+      "WatchDate": "",
+      "ReleaseDate": "2022-08-12",
+      "Runtime": "",
+      "Genre": "Thriller, Survival",
+      "Director": "Scott Mann",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "Searching",
+      "Rating": null,
+      "WatchDate": "",
+      "ReleaseDate": "2018-08-24",
+      "Runtime": "",
+      "Genre": "Thriller, Mystery",
+      "Director": "Aneesh Chaganty",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "Heretic",
+      "Rating": null,
+      "WatchDate": "",
+      "ReleaseDate": "2024-11-08",
+      "Runtime": "",
+      "Genre": "Horror, Thriller",
+      "Director": "Scott Beck, Bryan Woods",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "The Housemaid",
+      "Rating": null,
+      "WatchDate": "",
+      "ReleaseDate": "2010-05-13",
+      "Runtime": "",
+      "Genre": "Thriller, Drama",
+      "Director": "Im Sang-soo",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "Subservience",
+      "Rating": null,
+      "WatchDate": "",
+      "ReleaseDate": "2024-08-23",
+      "Runtime": "",
+      "Genre": "Science Fiction, Thriller",
+      "Director": "S.K. Dale",
+      "Studio": "",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "OtherLife",
+      "Rating": 3,
+      "WatchDate": "2026-05-24",
+      "ReleaseDate": "2017-06-16",
+      "Runtime": "01:36:00",
+      "Genre": "Science Fiction, Thriller, Mystery",
+      "Director": "Ben C. Lucas",
+      "Studio": "See Pictures",
+      "Actors": "Jessica De Gouw, Thomas Cocquerel, T.J. Power",
+      "Notes": ""
+    }
+  ]
+}
