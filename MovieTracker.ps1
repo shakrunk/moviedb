@@ -343,24 +343,10 @@ function Update-MovieEntry {
     Initialize-MovieDatabase
 
     # Interactive Wizard Fallback
-    if (-not $PSBoundParameters.ContainsKey('Value')) {
-        $currentVal = $SelectedRecord.$Property
-        if ($null -eq $currentVal -or $currentVal -eq "") { $currentVal = "<empty>" }
-
-        if ($Property -eq 'Rating') {
-            $RatingChoices = @("Clear Rating", "1 - Terrible", "2 - Bad", "3 - Okay", "4 - Good", "5 - Masterpiece")
-            $ratingSelection = Invoke-ChoiceMenu -Prompt "Select new Rating (Current: $currentVal):" -Choices $RatingChoices
-
-            if (-not $ratingSelection) { return }
-
-            if ($ratingSelection -eq "Clear Rating") {
-                $Value = ""
-            } else {
-                $Value = $ratingSelection.Substring(0,1)
-            }
-        } else {
-            $Value = Read-Host "New value for $Property (Current: $currentVal)"
-        }
+    if (-not $PSBoundParameters.ContainsKey('Title')) {
+        Write-Host "--- Update Movie Entry ---" -ForegroundColor Cyan
+        $Title = Read-Host "Enter Movie Title to update"
+        if ([string]::IsNullOrWhiteSpace($Title)) { return }
     }
 
     $RawJson = Get-Content -Raw -Path $Global:MovieDbPath | ConvertFrom-Json
@@ -409,7 +395,20 @@ function Update-MovieEntry {
         $currentVal = $SelectedRecord.$Property
         if ($null -eq $currentVal -or $currentVal -eq "") { $currentVal = "<empty>" }
 
-        $Value = Read-Host "New value for $Property (Current: $currentVal)"
+        if ($Property -eq 'Rating') {
+            $RatingChoices = @("Clear Rating", "1 - Terrible", "2 - Bad", "3 - Okay", "4 - Good", "5 - Masterpiece")
+            $ratingSelection = Invoke-ChoiceMenu -Prompt "Select new Rating (Current: $currentVal):" -Choices $RatingChoices
+
+            if (-not $ratingSelection) { return }
+
+            if ($ratingSelection -eq "Clear Rating") {
+                $Value = ""
+            } else {
+                $Value = $ratingSelection.Substring(0,1)
+            }
+        } else {
+            $Value = Read-Host "New value for $Property (Current: $currentVal)"
+        }
     }
 
     if ($Property -eq 'Rating') {
