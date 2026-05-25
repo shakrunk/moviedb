@@ -1,12 +1,13 @@
 {
   "_metadata": {
     "description": "Self-documenting movie and TV show data store with embedded PowerShell mutation instructions.",
-    "schema_version": "1.1.0",
+    "schema_version": "1.2.0",
     "instructions": {
-      "context": "When the user provides this JSON file and asks to add or modify records, parse the active log. Do not rewrite the file. Instead, generate the exact PowerShell command string required to execute the change locally based on the syntax defined below.",
+      "context": "When the user provides this JSON file and asks to add or modify records, parse the active log. Do not rewrite the file. Instead, generate the exact PowerShell command string required to execute the change locally based on the syntax defined below. Note: The provided JSON may be a minimized clipboard export (omitting fields like Genre, Runtime, or Actors to save tokens). You can still generate mutation commands for all available fields.",
       "syntax": {
         "add_entry": "Add-MovieEntry -Title 'Movie Title' -Rating 5 -WatchDate 'YYYY-MM-DD' -ReleaseDate 'YYYY-MM-DD' -Runtime 'HH:MM:SS' -Genre 'Genre1, Genre2' -Director 'Director Name' -Studio 'Studio Name' -Actors 'Actor 1, Actor 2' -Notes 'Optional notes'",
-        "update_property": "Update-MovieEntry -Title 'Movie Title' -Property 'WatchDate' -Value 'YYYY-MM-DD'"
+        "update_property": "Update-MovieEntry -Title 'Movie Title' -Property 'WatchDate' -Value 'YYYY-MM-DD'",
+        "audit_entry": "Get-MovieEntry -SearchTerm 'Movie Title' [-Detailed]"
       }
     }
   },
