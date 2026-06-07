@@ -1,13 +1,15 @@
 {
   "_metadata": {
     "description": "Self-documenting movie and TV show data store with embedded PowerShell mutation instructions.",
-    "schema_version": "1.2.0",
+    "schema_version": "1.5.0",
     "instructions": {
-      "context": "When the user provides this JSON file and asks to add or modify records, parse the active log. Do not rewrite the file. Instead, generate the exact PowerShell command string required to execute the change locally based on the syntax defined below. Note: The provided JSON may be a minimized clipboard export (omitting fields like Genre, Runtime, or Actors to save tokens). You can still generate mutation commands for all available fields.",
+      "context": "When the user provides this JSON file and asks to add or modify records, parse the active log. Do not rewrite the file. Instead, generate the exact PowerShell command string required to execute the change locally based on the syntax defined below. Note: The provided JSON may be a minimized clipboard export (omitting fields like Genre, Runtime, or Actors to save tokens). You can still generate mutation commands for all available fields. IMPORTANT: Every entry in this log is a movie the user has already watched. The Status field makes this explicit — 'watched_no_date' means the user watched it before this log was started and the exact date is unknown, NOT that it is unwatched or on a wish list. Only 'want_to_watch' entries are unseen.",
+      "field_notes": "Status is one of: 'watched' (seen, WatchDate contains the date(s)), 'watched_no_date' (seen before this log was started — treat as watched, exact date unknown), 'want_to_watch' (not yet seen). WatchDate is an array of YYYY-MM-DD strings (one per viewing), supporting re-watches; empty [] when Status is watched_no_date or want_to_watch. PriorWatch is a boolean: false = genuine first-ever viewing, true = the user had seen this movie before (pre-system or prior watch not logged here), null/absent = unknown. Runtime is zero-padded HH:MM:SS. ReleaseDate is YYYY-MM-DD.",
       "syntax": {
-        "add_entry": "Add-MovieEntry -Title 'Movie Title' -Rating 5 -WatchDate 'YYYY-MM-DD' -ReleaseDate 'YYYY-MM-DD' -Runtime 'HH:MM:SS' -Genre 'Genre1, Genre2' -Director 'Director Name' -Studio 'Studio Name' -Actors 'Actor 1, Actor 2' -Notes 'Optional notes'",
-        "update_property": "Update-MovieEntry -Title 'Movie Title' -Property 'WatchDate' -Value 'YYYY-MM-DD'",
-        "audit_entry": "Get-MovieEntry -SearchTerm 'Movie Title' [-Detailed]"
+        "add_entry": "Add-MovieEntry -Title 'Movie Title' -Status 'watched|watched_no_date|want_to_watch' -Rating 5 -WatchDate 'YYYY-MM-DD','YYYY-MM-DD' -PriorWatch $false -ReleaseDate 'YYYY-MM-DD' -Runtime 'HH:MM:SS' -Genre 'Genre1, Genre2' -Director 'Director Name' -Studio 'Studio Name' -Actors 'Actor 1, Actor 2' -Notes 'Optional notes'",
+        "update_property": "Update-MovieEntry -Title 'Movie Title' -Property 'WatchDate' -Value 'YYYY-MM-DD'  (for WatchDate this APPENDS the date to the existing list; an empty value clears it; for PriorWatch use $true or $false)",
+        "mark_watched": "Mark-MovieWatched -Title 'Movie Title' [-WatchDate 'YYYY-MM-DD'] [-PriorWatch $true|$false]  (atomically sets Status to watched and appends the date; defaults to today if WatchDate is omitted; PriorWatch inferred from prior status when possible)",
+        "audit_entry": "Get-MovieEntry -SearchTerm 'Movie Title' [-Detailed] [-Column Title,WatchDate,Status,Rating] [-StatusFilter watched|watched_no_date|want_to_watch] [-Watchlist] [-MinRating N] [-SortBy Title|Year|Rating|WatchDate] [-Descending]"
       }
     }
   },
@@ -15,9 +17,10 @@
     {
       "Title": "Inception",
       "Rating": 5,
-      "WatchDate": null,
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "2010-07-15",
-      "Runtime": "2:28:00",
+      "Runtime": "02:28:00",
       "Genre": "Action, Science Fiction, Adventure",
       "Director": "Christopher Nolan",
       "Studio": "Legendary Pictures",
@@ -27,9 +30,10 @@
     {
       "Title": "Pulp Fiction",
       "Rating": 1,
-      "WatchDate": null,
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "1994-09-10",
-      "Runtime": "2:34:00",
+      "Runtime": "02:34:00",
       "Genre": "Thriller, Crime, Comedy",
       "Director": "Quentin Tarantino",
       "Studio": "Miramax",
@@ -39,9 +43,10 @@
     {
       "Title": "The Shawshank Redemption",
       "Rating": 5,
-      "WatchDate": "",
-      "ReleaseDate": "9/23/1994",
-      "Runtime": "2:22:00",
+      "WatchDate": [],
+      "Status": "watched_no_date",
+      "ReleaseDate": "1994-09-23",
+      "Runtime": "02:22:00",
       "Genre": "Drama, Crime",
       "Director": "Frank Darabont",
       "Studio": "Castle Rock Entertainment",
@@ -51,9 +56,10 @@
     {
       "Title": "The Dark Knight",
       "Rating": 5,
-      "WatchDate": "",
-      "ReleaseDate": "7/16/2008",
-      "Runtime": "2:32:00",
+      "WatchDate": [],
+      "Status": "watched_no_date",
+      "ReleaseDate": "2008-07-16",
+      "Runtime": "02:32:00",
       "Genre": "Action, Crime, Thriller",
       "Director": "Christopher Nolan",
       "Studio": "Warner Bros. Pictures",
@@ -63,9 +69,10 @@
     {
       "Title": "Forrest Gump",
       "Rating": 2,
-      "WatchDate": "",
-      "ReleaseDate": "6/23/1994",
-      "Runtime": "2:22:00",
+      "WatchDate": [],
+      "Status": "watched_no_date",
+      "ReleaseDate": "1994-06-23",
+      "Runtime": "02:22:00",
       "Genre": "Comedy, Drama, Romance",
       "Director": "Robert Zemeckis",
       "Studio": "Paramount Pictures",
@@ -75,223 +82,246 @@
     {
       "Title": "Interstellar",
       "Rating": 3,
-      "WatchDate": "",
-      "ReleaseDate": "11/5/2014",
-      "Runtime": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
+      "ReleaseDate": "2014-11-05",
+      "Runtime": "02:49:00",
       "Genre": "Adventure, Drama, Science Fiction",
       "Director": "Christopher Nolan",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "Paramount Pictures, Warner Bros. Pictures, Legendary Pictures",
+      "Actors": "Matthew McConaughey, Anne Hathaway, Jessica Chastain, Michael Caine, Casey Affleck",
       "Notes": "Ambitious and thought-provoking."
     },
     {
       "Title": "GATTACA",
       "Rating": 5,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "1997-07-09",
-      "Runtime": "",
+      "Runtime": "01:46:00",
       "Genre": "Science Fiction, Drama, Thriller",
       "Director": "Andrew Niccol",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "Columbia Pictures",
+      "Actors": "Ethan Hawke, Uma Thurman, Jude Law, Alan Arkin, Loren Dean",
       "Notes": ""
     },
     {
       "Title": "A Bugs Life",
       "Rating": 4,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "1998-11-25",
-      "Runtime": "",
+      "Runtime": "01:35:00",
       "Genre": "Adventure, Animation, Comedy, Family",
       "Director": "John Lasseter",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "Pixar Animation Studios, Walt Disney Pictures",
+      "Actors": "Dave Foley, Kevin Spacey, Julia Louis-Dreyfus, Hayden Panettiere, Phyllis Diller",
       "Notes": ""
     },
     {
       "Title": "The Sixth Sense",
       "Rating": null,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "1999-08-06",
-      "Runtime": "",
+      "Runtime": "01:47:00",
       "Genre": "Thriller, Mystery",
       "Director": "M. Night Shyamalan",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "Hollywood Pictures, Spyglass Entertainment",
+      "Actors": "Bruce Willis, Haley Joel Osment, Toni Collette, Olivia Williams, Donnie Wahlberg",
       "Notes": ""
     },
     {
       "Title": "The Matrix",
       "Rating": null,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "1999-03-31",
-      "Runtime": "",
+      "Runtime": "02:16:00",
       "Genre": "Science Fiction, Action",
       "Director": "The Wachowskis",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "Warner Bros. Pictures, Village Roadshow Pictures",
+      "Actors": "Keanu Reeves, Laurence Fishburne, Carrie-Anne Moss, Hugo Weaving, Joe Pantoliano",
       "Notes": ""
     },
     {
       "Title": "Looper",
       "Rating": null,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "2012-09-28",
-      "Runtime": "",
+      "Runtime": "01:59:00",
       "Genre": "Science Fiction, Action",
       "Director": "Rian Johnson",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "TriStar Pictures, FilmDistrict, Endgame Entertainment",
+      "Actors": "Joseph Gordon-Levitt, Bruce Willis, Emily Blunt, Paul Dano, Jeff Daniels",
       "Notes": ""
     },
     {
       "Title": "Upgrade",
       "Rating": null,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "2018-06-01",
-      "Runtime": "",
+      "Runtime": "01:40:00",
       "Genre": "Science Fiction, Action",
       "Director": "Leigh Whannell",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "Blumhouse Productions, Goalpost Pictures",
+      "Actors": "Logan Marshall-Green, Betty Gabriel, Harrison Gilbertson, Melanie Vallejo, Benedict Hardie",
       "Notes": ""
     },
     {
       "Title": "Everything Everywhere All at Once",
       "Rating": null,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "2022-03-25",
-      "Runtime": "",
+      "Runtime": "02:19:00",
       "Genre": "Science Fiction, Adventure",
       "Director": "Daniel Kwan, Daniel Scheinert",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "A24, IAC Films, Ley Line Entertainment",
+      "Actors": "Michelle Yeoh, Stephanie Hsu, Ke Huy Quan, Jamie Lee Curtis, James Hong",
       "Notes": ""
     },
     {
       "Title": "Ex Machina",
       "Rating": null,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "2015-04-10",
-      "Runtime": "",
+      "Runtime": "01:48:00",
       "Genre": "Science Fiction, Thriller",
       "Director": "Alex Garland",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "Film4, DNA Films",
+      "Actors": "Alicia Vikander, Domhnall Gleeson, Oscar Isaac, Sonoya Mizuno",
       "Notes": ""
     },
     {
       "Title": "Arrival",
       "Rating": null,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "2016-11-11",
-      "Runtime": "",
+      "Runtime": "01:56:00",
       "Genre": "Science Fiction, Drama",
       "Director": "Denis Villeneuve",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "Paramount Pictures, FilmNation Entertainment, Lava Bear Films",
+      "Actors": "Amy Adams, Jeremy Renner, Forest Whitaker, Michael Stuhlbarg",
       "Notes": ""
     },
     {
       "Title": "Coherence",
-      "Rating": null,
-      "WatchDate": "",
+      "Rating": 4,
+      "WatchDate": [
+        "2026-06-06"
+      ],
+      "Status": "watched",
       "ReleaseDate": "2013-09-19",
-      "Runtime": "",
+      "Runtime": "01:29:00",
       "Genre": "Science Fiction, Thriller",
       "Director": "James Ward Byrkit",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "Bellanova Films, Ugly Duckling Films",
+      "Actors": "Emily Baldoni, Maury Sterling, Nicholas Brendon, Lorene Scafaria, Elizabeth Gracen",
       "Notes": ""
     },
     {
       "Title": "Triangle",
       "Rating": null,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "2009-10-16",
-      "Runtime": "",
+      "Runtime": "01:39:00",
       "Genre": "Thriller, Mystery",
       "Director": "Christopher Smith",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "Icon Entertainment, Dan Films, UK Film Council",
+      "Actors": "Melissa George, Michael Dorman, Rachael Carpani, Henry Nixon, Liam Hemsworth",
       "Notes": ""
     },
     {
       "Title": "Predestination",
       "Rating": null,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "2014-08-28",
-      "Runtime": "",
+      "Runtime": "01:37:00",
       "Genre": "Science Fiction, Thriller",
       "Director": "The Spierig Brothers",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "Screen Australia, Blacklab Entertainment, Wolfhound Pictures",
+      "Actors": "Ethan Hawke, Sarah Snook, Noah Taylor",
       "Notes": ""
     },
     {
       "Title": "Fall",
       "Rating": null,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "2022-08-12",
-      "Runtime": "",
+      "Runtime": "01:47:00",
       "Genre": "Thriller, Survival",
       "Director": "Scott Mann",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "Capstone Pictures, Tea Shop Productions, BuzzFeed Studios",
+      "Actors": "Grace Caroline Currey, Virginia Gardner, Mason Gooding, Jeffrey Dean Morgan",
       "Notes": ""
     },
     {
       "Title": "Searching",
       "Rating": null,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "2018-08-24",
-      "Runtime": "",
+      "Runtime": "01:42:00",
       "Genre": "Thriller, Mystery",
       "Director": "Aneesh Chaganty",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "Screen Gems, Stage 6 Films, Bazelevs Company",
+      "Actors": "John Cho, Debra Messing, Joseph Lee, Michelle La, Sara Sohn",
       "Notes": ""
     },
     {
       "Title": "Heretic",
       "Rating": 5,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "2024-11-08",
-      "Runtime": "",
+      "Runtime": "01:51:00",
       "Genre": "Horror, Thriller",
       "Director": "Scott Beck, Bryan Woods",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "A24, Beck/Woods, Catchlight Studios",
+      "Actors": "Hugh Grant, Sophie Thatcher, Chloe East, Topher Grace",
       "Notes": ""
     },
     {
       "Title": "The Housemaid",
       "Rating": null,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "2010-05-13",
-      "Runtime": "",
+      "Runtime": "01:46:00",
       "Genre": "Thriller, Drama",
       "Director": "Im Sang-soo",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "Mirovision, Sidus FNH",
+      "Actors": "Jeon Do-yeon, Lee Jung-jae, Youn Yuh-jung, Seo Woo",
       "Notes": ""
     },
     {
       "Title": "Subservience",
       "Rating": null,
-      "WatchDate": "",
+      "WatchDate": [],
+      "Status": "watched_no_date",
       "ReleaseDate": "2024-08-23",
-      "Runtime": "",
+      "Runtime": "01:35:00",
       "Genre": "Science Fiction, Thriller",
       "Director": "S.K. Dale",
-      "Studio": "",
-      "Actors": "",
+      "Studio": "Millennium Media, XYZ Films",
+      "Actors": "Megan Fox, Michele Morrone, Madeline Zima, Matilda Firth",
       "Notes": ""
     },
     {
       "Title": "OtherLife",
       "Rating": 3,
-      "WatchDate": "2026-05-24",
+      "WatchDate": [
+        "2026-05-24"
+      ],
+      "Status": "watched",
       "ReleaseDate": "2017-06-16",
       "Runtime": "01:36:00",
       "Genre": "Science Fiction, Thriller, Mystery",
@@ -299,6 +329,345 @@
       "Studio": "See Pictures",
       "Actors": "Jessica De Gouw, Thomas Cocquerel, T.J. Power",
       "Notes": ""
+    },
+    {
+      "Title": "Smile",
+      "Rating": 4,
+      "WatchDate": [
+        "2026-05-30"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2022-09-30",
+      "Runtime": "01:55:00",
+      "Genre": "Horror, Mystery, Thriller",
+      "Director": "Parker Finn",
+      "Studio": "Paramount Pictures",
+      "Actors": "Sosie Bacon, Jessie T. Usher, Kyle Gallner",
+      "Notes": "Concept felt familiar immediately; unsure if watched previously or just recognizing the sequel."
+    },
+    {
+      "Title": "Eternal Sunshine of the Spotless Mind",
+      "Rating": null,
+      "WatchDate": [
+        "2025-04-08"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2004-03-19",
+      "Runtime": "01:48:00",
+      "Genre": "Science Fiction, Drama, Romance",
+      "Director": "Michel Gondry",
+      "Studio": "Focus Features, Anonymous Content",
+      "Actors": "Jim Carrey, Kate Winslet, Kirsten Dunst, Mark Ruffalo, Elijah Wood",
+      "Notes": ""
+    },
+    {
+      "Title": "How to Train Your Dragon: Homecoming",
+      "Rating": null,
+      "WatchDate": [
+        "2025-04-27"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2019-12-03",
+      "Runtime": "00:22:00",
+      "Genre": "Animation, Action, Adventure, Family",
+      "Director": "Tim Johnson",
+      "Studio": "DreamWorks Animation",
+      "Actors": "Jay Baruchel, America Ferrera, Gerard Butler, Cate Blanchett, Christopher Mintz-Plasse",
+      "Notes": ""
+    },
+    {
+      "Title": "How to Train Your Dragon: Snoggletog Log",
+      "Rating": null,
+      "WatchDate": [
+        "2025-04-27"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2019-12-05",
+      "Runtime": "00:28:00",
+      "Genre": "Animation, Short, Family",
+      "Director": "Tim Johnson",
+      "Studio": "DreamWorks Animation",
+      "Actors": "",
+      "Notes": ""
+    },
+    {
+      "Title": "Sinners",
+      "Rating": null,
+      "WatchDate": [
+        "2025-06-05"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2025-04-18",
+      "Runtime": "02:17:00",
+      "Genre": "Horror, Thriller, Drama",
+      "Director": "Ryan Coogler",
+      "Studio": "Warner Bros. Pictures, Proximity Media",
+      "Actors": "Michael B. Jordan, Hailee Steinfeld, Miles Caton, Jack O'Connell, Wunmi Mosaku",
+      "Notes": ""
+    },
+    {
+      "Title": "What Women Want",
+      "Rating": null,
+      "WatchDate": [
+        "2025-06-28"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2000-12-15",
+      "Runtime": "02:07:00",
+      "Genre": "Comedy, Romance",
+      "Director": "Nancy Meyers",
+      "Studio": "Paramount Pictures, Icon Productions",
+      "Actors": "Mel Gibson, Helen Hunt, Marisa Tomei, Ashley Johnson, Mark Feuerstein",
+      "Notes": ""
+    },
+    {
+      "Title": "The Hidden Face",
+      "Rating": null,
+      "WatchDate": [
+        "2025-06-30"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2011-09-16",
+      "Runtime": "01:37:00",
+      "Genre": "Drama, Mystery, Thriller",
+      "Director": "Andrés Baiz",
+      "Studio": "Cactus Flower Producciones, Fox International Productions",
+      "Actors": "Quim Gutiérrez, Martina García, Clara Lago",
+      "Notes": ""
+    },
+    {
+      "Title": "Thunderbolts*",
+      "Rating": null,
+      "WatchDate": [
+        "2025-07-21"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2025-05-02",
+      "Runtime": "02:06:00",
+      "Genre": "Action, Adventure, Science Fiction",
+      "Director": "Jake Schreier",
+      "Studio": "Marvel Studios",
+      "Actors": "Florence Pugh, Sebastian Stan, Wyatt Russell, David Harbour, Julia Louis-Dreyfus",
+      "Notes": ""
+    },
+    {
+      "Title": "The Pursuit of Happyness",
+      "Rating": null,
+      "WatchDate": [
+        "2025-08-25"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2006-12-15",
+      "Runtime": "01:57:00",
+      "Genre": "Drama",
+      "Director": "Gabriele Muccino",
+      "Studio": "Columbia Pictures, Overbrook Entertainment",
+      "Actors": "Will Smith, Jaden Smith, Thandiwe Newton, Brian Howe, James Karen",
+      "Notes": ""
+    },
+    {
+      "Title": "The Giver",
+      "Rating": null,
+      "WatchDate": [
+        "2025-09-01"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2014-08-15",
+      "Runtime": "01:37:00",
+      "Genre": "Science Fiction, Drama",
+      "Director": "Phillip Noyce",
+      "Studio": "The Weinstein Company, Walden Media",
+      "Actors": "Brenton Thwaites, Jeff Bridges, Meryl Streep, Katie Holmes, Alexander Skarsgård",
+      "Notes": ""
+    },
+    {
+      "Title": "TRON: Ares",
+      "Rating": null,
+      "WatchDate": [
+        "2025-11-24"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2025-10-10",
+      "Runtime": "01:59:00",
+      "Genre": "Science Fiction, Action, Adventure",
+      "Director": "Joachim Rønning",
+      "Studio": "Walt Disney Pictures",
+      "Actors": "Jared Leto, Greta Lee, Evan Peters, Gillian Anderson, Jeff Bridges",
+      "Notes": ""
+    },
+    {
+      "Title": "The Substance",
+      "Rating": null,
+      "WatchDate": [
+        "2025-12-01"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2024-09-20",
+      "Runtime": "02:21:00",
+      "Genre": "Horror, Science Fiction, Drama",
+      "Director": "Coralie Fargeat",
+      "Studio": "Working Title Films, Blacksmith",
+      "Actors": "Demi Moore, Margaret Qualley, Dennis Quaid",
+      "Notes": ""
+    },
+    {
+      "Title": "Batman: Hush",
+      "Rating": null,
+      "WatchDate": [
+        "2025-12-13"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2019-07-20",
+      "Runtime": "01:22:00",
+      "Genre": "Animation, Action, Mystery",
+      "Director": "Justin Copeland",
+      "Studio": "Warner Bros. Animation, DC Entertainment",
+      "Actors": "Jason O'Mara, Jennifer Morrison, Jerry O'Connell, Rainn Wilson, Maury Sterling",
+      "Notes": ""
+    },
+    {
+      "Title": "The Father",
+      "Rating": null,
+      "WatchDate": [
+        "2025-12-13"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2020-12-23",
+      "Runtime": "01:37:00",
+      "Genre": "Drama, Mystery",
+      "Director": "Florian Zeller",
+      "Studio": "Les Films du Cru, Trademark Films, Orange Studio",
+      "Actors": "Anthony Hopkins, Olivia Colman, Mark Gatiss, Imogen Poots, Rufus Sewell, Olivia Williams",
+      "Notes": ""
+    },
+    {
+      "Title": "Primer",
+      "Rating": null,
+      "WatchDate": [
+        "2026-01-02"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2004-10-08",
+      "Runtime": "01:17:00",
+      "Genre": "Science Fiction, Drama, Thriller",
+      "Director": "Shane Carruth",
+      "Studio": "ERBP",
+      "Actors": "Shane Carruth, David Sullivan, Casey Gooden, Anand Upadhyaya",
+      "Notes": ""
+    },
+    {
+      "Title": "Doctor Strange",
+      "Rating": null,
+      "WatchDate": [
+        "2026-01-25"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2016-11-04",
+      "Runtime": "01:55:00",
+      "Genre": "Action, Adventure, Fantasy",
+      "Director": "Scott Derrickson",
+      "Studio": "Marvel Studios",
+      "Actors": "Benedict Cumberbatch, Chiwetel Ejiofor, Rachel McAdams, Benedict Wong, Mads Mikkelsen, Tilda Swinton",
+      "Notes": ""
+    },
+    {
+      "Title": "Sky High",
+      "Rating": null,
+      "WatchDate": [
+        "2026-01-25"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2005-07-29",
+      "Runtime": "01:40:00",
+      "Genre": "Action, Comedy, Family, Science Fiction",
+      "Director": "Mike Mitchell",
+      "Studio": "Walt Disney Pictures",
+      "Actors": "Michael Angarano, Kurt Russell, Kelly Preston, Danielle Panabaker, Mary Elizabeth Winstead",
+      "Notes": ""
+    },
+    {
+      "Title": "Her",
+      "Rating": null,
+      "WatchDate": [
+        "2026-02-20"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2013-12-18",
+      "Runtime": "02:06:00",
+      "Genre": "Romance, Science Fiction, Drama",
+      "Director": "Spike Jonze",
+      "Studio": "Annapurna Pictures",
+      "Actors": "Joaquin Phoenix, Amy Adams, Rooney Mara, Olivia Wilde, Scarlett Johansson",
+      "Notes": ""
+    },
+    {
+      "Title": "Archive",
+      "Rating": null,
+      "WatchDate": [
+        "2026-04-25"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2020-07-10",
+      "Runtime": "01:49:00",
+      "Genre": "Science Fiction, Drama, Mystery",
+      "Director": "Gavin Rothery",
+      "Studio": "Independent, Head Gear Films",
+      "Actors": "Theo James, Stacy Martin, Rhona Mitra, Toby Jones, Peter Ferdinando",
+      "Notes": ""
+    },
+    {
+      "Title": "The Prestige",
+      "Rating": 4,
+      "WatchDate": [],
+      "Status": "watched_no_date",
+      "ReleaseDate": "2006-10-20",
+      "Runtime": "02:10:00",
+      "Genre": "Drama, Mystery, Sci-Fi",
+      "Director": "Christopher Nolan",
+      "Studio": "Touchstone Pictures, Warner Bros.",
+      "Actors": "Hugh Jackman, Christian Bale, Scarlett Johansson, Michael Caine",
+      "Notes": "Kinda unimpressed but mostly because the big \"twist\" was a little derivative."
+    },
+    {
+      "Title": "The Game",
+      "Rating": 4,
+      "WatchDate": [],
+      "Status": "watched_no_date",
+      "ReleaseDate": "1997-09-12",
+      "Runtime": "02:09:00",
+      "Genre": "Drama, Mystery, Thriller",
+      "Director": "David Fincher",
+      "Studio": "PolyGram Filmed Entertainment",
+      "Actors": "Michael Douglas, Sean Penn, Deborah Kara Unger",
+      "Notes": "That was a fun one."
+    },
+    {
+      "Title": "Fracture",
+      "Rating": 4,
+      "WatchDate": [
+        "2026-06-01"
+      ],
+      "Status": "watched",
+      "ReleaseDate": "2007-04-20",
+      "Runtime": "01:53:00",
+      "Genre": "Crime, Drama, Thriller",
+      "Director": "Gregory Hoblit",
+      "Studio": "Castle Rock Entertainment",
+      "Actors": "Ryan Gosling, Anthony Hopkins",
+      "Notes": "Solid 4 / 5 in my book"
+    },
+    {
+      "Title": "Prisoners",
+      "Rating": 3,
+      "WatchDate": [],
+      "Status": "watched_no_date",
+      "ReleaseDate": "2013-09-20",
+      "Runtime": "02:33:00",
+      "Genre": "Crime, Drama, Mystery, Thriller",
+      "Director": "Denis Villeneuve",
+      "Studio": "Alcon Entertainment",
+      "Actors": "Hugh Jackman, Jake Gyllenhaal, Viola Davis, Paul Dano",
+      "Notes": "The one with the weird recurring maze motif."
     }
   ]
 }
