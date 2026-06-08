@@ -180,14 +180,14 @@ function Invoke-ITunesSearch {
                 $rt = '{0:hh\:mm\:ss}' -f $ts
             }
             $out += [PSCustomObject]@{
-                title       = $m.trackName
+                title       = [string]$m.trackName
                 year        = $year
                 releaseDate = if ($m.releaseDate) { $m.releaseDate.Substring(0,10) } else { '' }
                 runtime     = $rt
-                genre       = $m.primaryGenreName
-                director    = if ($m.directorName) { $m.directorName } else { $m.artistName }
+                genre       = [string]$m.primaryGenreName
+                director    = if ($m.directorName) { [string]$m.directorName } else { [string]$m.artistName }
                 poster      = Resize-Artwork $m.artworkUrl100
-                notes       = $m.longDescription
+                notes       = [string]$m.longDescription
             }
         }
     }
@@ -218,6 +218,7 @@ function Write-Response {
 function Write-Json {
     param($Context, $Object, [int]$Status = 200)
     $json = if ($null -eq $Object) { 'null' } else { $Object | ConvertTo-Json -Depth 12 -Compress }
+    if ([string]::IsNullOrEmpty($json)) { $json = 'null' }
     Write-Response $Context ([Text.Encoding]::UTF8.GetBytes($json)) 'application/json; charset=utf-8' $Status
 }
 
