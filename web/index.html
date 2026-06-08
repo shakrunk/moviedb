@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Projection Room</title>
+<meta name="color-scheme" content="dark" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..600&family=Hanken+Grotesk:wght@300..800&family=DM+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body data-view="dashboard">
+
+<!-- ── Atmosphere layers ───────────────────────────────────────────── -->
+<div class="grain" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
+<div class="projector-beam" aria-hidden="true"></div>
+<div class="dust" aria-hidden="true"></div>
+
+<!-- ── Marquee header ──────────────────────────────────────────────── -->
+<header class="marquee">
+  <div class="marquee__brand" id="goHome" role="button" tabindex="0" title="The Projection Room">
+    <svg class="brand-mark" aria-hidden="true" viewBox="0 0 24 24"><use href="#ic-reel"/></svg>
+    <div class="brand-text">
+      <span class="brand-name">The Projection&nbsp;Room</span>
+      <span class="brand-sub" id="brandSub">a private film archive</span>
+    </div>
+  </div>
+
+  <nav class="marquee__nav" role="tablist">
+    <button class="navtab" data-go="dashboard" role="tab"><svg viewBox="0 0 24 24"><use href="#ic-chart"/></svg><span>The&nbsp;Ledger</span></button>
+    <button class="navtab" data-go="library" role="tab"><svg viewBox="0 0 24 24"><use href="#ic-grid"/></svg><span>The&nbsp;Library</span></button>
+  </nav>
+
+  <div class="marquee__actions">
+    <button class="icon-btn" id="btnSearch" title="Search (/)"><svg viewBox="0 0 24 24"><use href="#ic-search"/></svg></button>
+    <button class="icon-btn" id="btnSurprise" title="Surprise me"><svg viewBox="0 0 24 24"><use href="#ic-dice"/></svg></button>
+    <button class="icon-btn" id="btnExport" title="Copy for LLM"><svg viewBox="0 0 24 24"><use href="#ic-clip"/></svg></button>
+    <button class="btn btn--amber" id="btnAdd"><svg viewBox="0 0 24 24"><use href="#ic-plus"/></svg><span>Add&nbsp;Title</span></button>
+    <button class="icon-btn icon-btn--ghost" id="btnClose" title="Close the projection room"><svg viewBox="0 0 24 24"><use href="#ic-power"/></svg></button>
+  </div>
+</header>
+
+<main class="stage">
+
+  <!-- ══ DASHBOARD / THE LEDGER ════════════════════════════════════════ -->
+  <section class="view view--dashboard" id="view-dashboard">
+    <div class="dash-hero">
+      <p class="kicker"><span class="dot"></span> now showing &middot; <span id="todayStr"></span></p>
+      <h1 class="dash-title">An evening at <em>the&nbsp;pictures.</em></h1>
+      <p class="dash-lede" id="dashLede">Loading the reels&hellip;</p>
+    </div>
+
+    <div class="stat-strip" id="statStrip"><!-- stat cards injected --></div>
+
+    <div class="dash-grid">
+      <article class="panel panel--ratings">
+        <header class="panel__head"><h2>Critical record</h2><span class="panel__hint">rating distribution</span></header>
+        <div class="ratings-chart" id="ratingsChart"></div>
+      </article>
+
+      <article class="panel panel--genres">
+        <header class="panel__head"><h2>By the genre</h2><span class="panel__hint">top of the marquee</span></header>
+        <div class="genre-bars" id="genreBars"></div>
+      </article>
+
+      <article class="panel panel--timeline">
+        <header class="panel__head"><h2>Time in the dark</h2><span class="panel__hint">screenings by month</span></header>
+        <div class="timeline" id="timeline"></div>
+      </article>
+
+      <article class="panel panel--directors">
+        <header class="panel__head"><h2>The auteurs</h2><span class="panel__hint">most-watched directors</span></header>
+        <ol class="director-list" id="directorList"></ol>
+      </article>
+
+      <article class="panel panel--recent">
+        <header class="panel__head"><h2>Latest screenings</h2><span class="panel__hint">freshly logged</span></header>
+        <div class="recent-strip" id="recentStrip"></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ══ LIBRARY / NOW SHOWING ═════════════════════════════════════════ -->
+  <section class="view view--library" id="view-library" hidden>
+    <div class="controls">
+      <div class="search-field" id="searchField">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-search"/></svg>
+        <input type="text" id="searchInput" placeholder="Search title, director, genre, actor, studio, notes&hellip;" autocomplete="off" spellcheck="false" />
+        <button class="search-clear" id="searchClear" title="Clear" hidden><svg viewBox="0 0 24 24"><use href="#ic-x"/></svg></button>
+      </div>
+
+      <div class="seg" id="statusSeg" role="group" aria-label="Status filter">
+        <button class="seg__btn is-active" data-status="all">All</button>
+        <button class="seg__btn" data-status="watched">Watched</button>
+        <button class="seg__btn" data-status="watched_no_date">Archive</button>
+        <button class="seg__btn" data-status="want_to_watch">Watchlist</button>
+      </div>
+
+      <div class="control-spacer"></div>
+
+      <label class="select-wrap" title="Sort">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-sort"/></svg>
+        <select id="sortSelect">
+          <option value="added-desc">Recently added</option>
+          <option value="watch-desc">Recently watched</option>
+          <option value="rating-desc">Highest rated</option>
+          <option value="rating-asc">Lowest rated</option>
+          <option value="title-asc">Title A&ndash;Z</option>
+          <option value="year-desc">Newest releases</option>
+          <option value="year-asc">Oldest releases</option>
+          <option value="runtime-desc">Longest</option>
+        </select>
+      </label>
+
+      <button class="icon-btn" id="btnFilters" title="More filters"><svg viewBox="0 0 24 24"><use href="#ic-sliders"/></svg></button>
+
+      <div class="viewtoggle" id="viewToggle" role="group" aria-label="View mode">
+        <button class="viewtoggle__btn is-active" data-mode="wall" title="Poster wall"><svg viewBox="0 0 24 24"><use href="#ic-grid"/></svg></button>
+        <button class="viewtoggle__btn" data-mode="list" title="Ledger list"><svg viewBox="0 0 24 24"><use href="#ic-list"/></svg></button>
+      </div>
+    </div>
+
+    <!-- advanced filters drawer -->
+    <div class="filterbar" id="filterbar" hidden>
+      <div class="filterbar__group">
+        <span class="filterbar__label">Genre</span>
+        <div class="chiprow" id="genreChips"></div>
+      </div>
+      <div class="filterbar__group">
+        <span class="filterbar__label">Minimum rating</span>
+        <div class="ratingfilter" id="ratingFilter"></div>
+      </div>
+      <div class="filterbar__group">
+        <span class="filterbar__label">Decade</span>
+        <div class="chiprow" id="decadeChips"></div>
+      </div>
+      <button class="btn btn--ghost btn--sm" id="btnClearFilters">Reset filters</button>
+    </div>
+
+    <div class="result-meta" id="resultMeta"></div>
+
+    <div class="poster-wall" id="wall"></div>
+
+    <div class="ledger-wrap" id="ledgerWrap" hidden>
+      <table class="ledger">
+        <thead>
+          <tr>
+            <th class="col-no">No.</th>
+            <th class="col-title sortable" data-sort="title">Title</th>
+            <th class="col-year sortable" data-sort="year">Year</th>
+            <th class="col-rating sortable" data-sort="rating">Rating</th>
+            <th class="col-runtime sortable" data-sort="runtime">Runtime</th>
+            <th class="col-genre">Genre</th>
+            <th class="col-director">Director</th>
+            <th class="col-status">Status</th>
+            <th class="col-watch sortable" data-sort="watch">Last seen</th>
+          </tr>
+        </thead>
+        <tbody id="ledgerBody"></tbody>
+      </table>
+    </div>
+
+    <div class="empty-state" id="emptyState" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-reel"/></svg>
+      <p class="empty-title">No titles match the bill.</p>
+      <p class="empty-sub">Try a different search or reset the filters.</p>
+    </div>
+  </section>
+</main>
+
+<!-- ── Detail drawer ───────────────────────────────────────────────── -->
+<aside class="drawer" id="drawer" aria-hidden="true"><div class="drawer__inner" id="drawerInner"></div></aside>
+
+<!-- ── Add / Edit modal ────────────────────────────────────────────── -->
+<div class="modal" id="modal" aria-hidden="true"><div class="modal__panel" id="modalPanel"></div></div>
+
+<!-- ── Scrim + toasts ──────────────────────────────────────────────── -->
+<div class="scrim" id="scrim" hidden></div>
+<div class="toasts" id="toasts"></div>
+
+<!-- ── Icon sprite ─────────────────────────────────────────────────── -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="ic-reel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="6.5" r="1.4"/><circle cx="12" cy="17.5" r="1.4"/><circle cx="6.5" cy="12" r="1.4"/><circle cx="17.5" cy="12" r="1.4"/>
+    </symbol>
+    <symbol id="ic-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="ic-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="ic-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="ic-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/></symbol>
+    <symbol id="ic-star-fill" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/></symbol>
+    <symbol id="ic-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M13.5 6.5l3 3"/></symbol>
+    <symbol id="ic-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></symbol>
+    <symbol id="ic-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4M4 20h16"/><rect x="7" y="12" width="3" height="5"/><rect x="12" y="8" width="3" height="9"/><rect x="17" y="14" width="3" height="3"/></symbol>
+    <symbol id="ic-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="4" y="4" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1"/></symbol>
+    <symbol id="ic-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+    <symbol id="ic-sort" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3"/></symbol>
+    <symbol id="ic-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/></symbol>
+    <symbol id="ic-dice" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="9" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="15" r="1.2" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="ic-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><rect x="6" y="4" width="12" height="16" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 11h6M9 15h4"/></symbol>
+    <symbol id="ic-power" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 4v8"/><path d="M7.5 7a7 7 0 1 0 9 0"/></symbol>
+    <symbol id="ic-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M8 3v4M16 3v4"/></symbol>
+    <symbol id="ic-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></symbol>
+    <symbol id="ic-ticket" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4 2 2 0 0 1 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/></symbol>
+    <symbol id="ic-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="ic-repeat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l3 3-3 3"/><path d="M20 6H8a4 4 0 0 0-4 4v1"/><path d="M7 21l-3-3 3-3"/><path d="M4 18h12a4 4 0 0 0 4-4v-1"/></symbol>
+    <symbol id="ic-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="2.6"/></symbol>
+    <symbol id="ic-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4.5 4.5L19 7"/></symbol>
+    <symbol id="ic-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14"/></symbol>
+    <symbol id="ic-sparkle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></symbol>
+  </defs>
+</svg>
+
+<script src="/app.js"></script>
+</body>
+</html>

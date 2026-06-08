@@ -19,6 +19,7 @@
       "Rating": 5,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2010-07-15",
       "Runtime": "02:28:00",
       "Genre": "Action, Science Fiction, Adventure",
@@ -32,6 +33,7 @@
       "Rating": 1,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "1994-09-10",
       "Runtime": "02:34:00",
       "Genre": "Thriller, Crime, Comedy",
@@ -45,6 +47,7 @@
       "Rating": 5,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "1994-09-23",
       "Runtime": "02:22:00",
       "Genre": "Drama, Crime",
@@ -58,6 +61,7 @@
       "Rating": 5,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2008-07-16",
       "Runtime": "02:32:00",
       "Genre": "Action, Crime, Thriller",
@@ -68,9 +72,10 @@
     },
     {
       "Title": "Forrest Gump",
-      "Rating": 2,
+      "Rating": 1,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "1994-06-23",
       "Runtime": "02:22:00",
       "Genre": "Comedy, Drama, Romance",
@@ -84,6 +89,7 @@
       "Rating": 3,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2014-11-05",
       "Runtime": "02:49:00",
       "Genre": "Adventure, Drama, Science Fiction",
@@ -97,6 +103,7 @@
       "Rating": 5,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "1997-07-09",
       "Runtime": "01:46:00",
       "Genre": "Science Fiction, Drama, Thriller",
@@ -110,6 +117,7 @@
       "Rating": 4,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "1998-11-25",
       "Runtime": "01:35:00",
       "Genre": "Adventure, Animation, Comedy, Family",
@@ -120,9 +128,10 @@
     },
     {
       "Title": "The Sixth Sense",
-      "Rating": null,
+      "Rating": 4,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "1999-08-06",
       "Runtime": "01:47:00",
       "Genre": "Thriller, Mystery",
@@ -133,9 +142,10 @@
     },
     {
       "Title": "The Matrix",
-      "Rating": null,
+      "Rating": 5,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "1999-03-31",
       "Runtime": "02:16:00",
       "Genre": "Science Fiction, Action",
@@ -149,6 +159,7 @@
       "Rating": null,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2012-09-28",
       "Runtime": "01:59:00",
       "Genre": "Science Fiction, Action",
@@ -159,9 +170,10 @@
     },
     {
       "Title": "Upgrade",
-      "Rating": null,
+      "Rating": 4,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2018-06-01",
       "Runtime": "01:40:00",
       "Genre": "Science Fiction, Action",
@@ -172,9 +184,10 @@
     },
     {
       "Title": "Everything Everywhere All at Once",
-      "Rating": null,
+      "Rating": 5,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2022-03-25",
       "Runtime": "02:19:00",
       "Genre": "Science Fiction, Adventure",
@@ -185,9 +198,10 @@
     },
     {
       "Title": "Ex Machina",
-      "Rating": null,
+      "Rating": 4,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2015-04-10",
       "Runtime": "01:48:00",
       "Genre": "Science Fiction, Thriller",
@@ -198,9 +212,10 @@
     },
     {
       "Title": "Arrival",
-      "Rating": null,
+      "Rating": 3,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2016-11-11",
       "Runtime": "01:56:00",
       "Genre": "Science Fiction, Drama",
@@ -216,6 +231,7 @@
         "2026-06-06"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2013-09-19",
       "Runtime": "01:29:00",
       "Genre": "Science Fiction, Thriller",
@@ -226,9 +242,10 @@
     },
     {
       "Title": "Triangle",
-      "Rating": null,
+      "Rating": 4,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2009-10-16",
       "Runtime": "01:39:00",
       "Genre": "Thriller, Mystery",
@@ -239,9 +256,10 @@
     },
     {
       "Title": "Predestination",
-      "Rating": null,
+      "Rating": 4,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2014-08-28",
       "Runtime": "01:37:00",
       "Genre": "Science Fiction, Thriller",
@@ -255,6 +273,7 @@
       "Rating": null,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2022-08-12",
       "Runtime": "01:47:00",
       "Genre": "Thriller, Survival",
@@ -268,6 +287,7 @@
       "Rating": null,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2018-08-24",
       "Runtime": "01:42:00",
       "Genre": "Thriller, Mystery",
@@ -281,6 +301,7 @@
       "Rating": 5,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2024-11-08",
       "Runtime": "01:51:00",
       "Genre": "Horror, Thriller",
@@ -291,9 +312,10 @@
     },
     {
       "Title": "The Housemaid",
-      "Rating": null,
+      "Rating": 3,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2010-05-13",
       "Runtime": "01:46:00",
       "Genre": "Thriller, Drama",
@@ -304,9 +326,10 @@
     },
     {
       "Title": "Subservience",
-      "Rating": null,
+      "Rating": 4,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2024-08-23",
       "Runtime": "01:35:00",
       "Genre": "Science Fiction, Thriller",
@@ -317,11 +340,12 @@
     },
     {
       "Title": "OtherLife",
-      "Rating": 3,
+      "Rating": 4,
       "WatchDate": [
         "2026-05-24"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2017-06-16",
       "Runtime": "01:36:00",
       "Genre": "Science Fiction, Thriller, Mystery",
@@ -337,6 +361,7 @@
         "2026-05-30"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2022-09-30",
       "Runtime": "01:55:00",
       "Genre": "Horror, Mystery, Thriller",
@@ -352,6 +377,7 @@
         "2025-04-08"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2004-03-19",
       "Runtime": "01:48:00",
       "Genre": "Science Fiction, Drama, Romance",
@@ -367,6 +393,7 @@
         "2025-04-27"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2019-12-03",
       "Runtime": "00:22:00",
       "Genre": "Animation, Action, Adventure, Family",
@@ -382,6 +409,7 @@
         "2025-04-27"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2019-12-05",
       "Runtime": "00:28:00",
       "Genre": "Animation, Short, Family",
@@ -392,11 +420,12 @@
     },
     {
       "Title": "Sinners",
-      "Rating": null,
+      "Rating": 5,
       "WatchDate": [
         "2025-06-05"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2025-04-18",
       "Runtime": "02:17:00",
       "Genre": "Horror, Thriller, Drama",
@@ -407,11 +436,12 @@
     },
     {
       "Title": "What Women Want",
-      "Rating": null,
+      "Rating": 3,
       "WatchDate": [
         "2025-06-28"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2000-12-15",
       "Runtime": "02:07:00",
       "Genre": "Comedy, Romance",
@@ -427,6 +457,7 @@
         "2025-06-30"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2011-09-16",
       "Runtime": "01:37:00",
       "Genre": "Drama, Mystery, Thriller",
@@ -442,6 +473,7 @@
         "2025-07-21"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2025-05-02",
       "Runtime": "02:06:00",
       "Genre": "Action, Adventure, Science Fiction",
@@ -452,11 +484,12 @@
     },
     {
       "Title": "The Pursuit of Happyness",
-      "Rating": null,
+      "Rating": 3,
       "WatchDate": [
         "2025-08-25"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2006-12-15",
       "Runtime": "01:57:00",
       "Genre": "Drama",
@@ -467,11 +500,12 @@
     },
     {
       "Title": "The Giver",
-      "Rating": null,
+      "Rating": 3,
       "WatchDate": [
         "2025-09-01"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2014-08-15",
       "Runtime": "01:37:00",
       "Genre": "Science Fiction, Drama",
@@ -482,11 +516,12 @@
     },
     {
       "Title": "TRON: Ares",
-      "Rating": null,
+      "Rating": 2,
       "WatchDate": [
         "2025-11-24"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2025-10-10",
       "Runtime": "01:59:00",
       "Genre": "Science Fiction, Action, Adventure",
@@ -502,6 +537,7 @@
         "2025-12-01"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2024-09-20",
       "Runtime": "02:21:00",
       "Genre": "Horror, Science Fiction, Drama",
@@ -517,6 +553,7 @@
         "2025-12-13"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2019-07-20",
       "Runtime": "01:22:00",
       "Genre": "Animation, Action, Mystery",
@@ -532,6 +569,7 @@
         "2025-12-13"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2020-12-23",
       "Runtime": "01:37:00",
       "Genre": "Drama, Mystery",
@@ -542,11 +580,12 @@
     },
     {
       "Title": "Primer",
-      "Rating": null,
+      "Rating": 5,
       "WatchDate": [
         "2026-01-02"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2004-10-08",
       "Runtime": "01:17:00",
       "Genre": "Science Fiction, Drama, Thriller",
@@ -557,11 +596,12 @@
     },
     {
       "Title": "Doctor Strange",
-      "Rating": null,
+      "Rating": 3,
       "WatchDate": [
         "2026-01-25"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2016-11-04",
       "Runtime": "01:55:00",
       "Genre": "Action, Adventure, Fantasy",
@@ -577,6 +617,7 @@
         "2026-01-25"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2005-07-29",
       "Runtime": "01:40:00",
       "Genre": "Action, Comedy, Family, Science Fiction",
@@ -587,11 +628,12 @@
     },
     {
       "Title": "Her",
-      "Rating": null,
+      "Rating": 4,
       "WatchDate": [
         "2026-02-20"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2013-12-18",
       "Runtime": "02:06:00",
       "Genre": "Romance, Science Fiction, Drama",
@@ -602,11 +644,12 @@
     },
     {
       "Title": "Archive",
-      "Rating": null,
+      "Rating": 3,
       "WatchDate": [
         "2026-04-25"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2020-07-10",
       "Runtime": "01:49:00",
       "Genre": "Science Fiction, Drama, Mystery",
@@ -620,6 +663,7 @@
       "Rating": 4,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2006-10-20",
       "Runtime": "02:10:00",
       "Genre": "Drama, Mystery, Sci-Fi",
@@ -633,6 +677,7 @@
       "Rating": 4,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "1997-09-12",
       "Runtime": "02:09:00",
       "Genre": "Drama, Mystery, Thriller",
@@ -648,6 +693,7 @@
         "2026-06-01"
       ],
       "Status": "watched",
+      "PriorWatch": null,
       "ReleaseDate": "2007-04-20",
       "Runtime": "01:53:00",
       "Genre": "Crime, Drama, Thriller",
@@ -661,6 +707,7 @@
       "Rating": 3,
       "WatchDate": [],
       "Status": "watched_no_date",
+      "PriorWatch": true,
       "ReleaseDate": "2013-09-20",
       "Runtime": "02:33:00",
       "Genre": "Crime, Drama, Mystery, Thriller",
@@ -668,6 +715,34 @@
       "Studio": "Alcon Entertainment",
       "Actors": "Hugh Jackman, Jake Gyllenhaal, Viola Davis, Paul Dano",
       "Notes": "The one with the weird recurring maze motif."
+    },
+    {
+      "Title": "Source Code",
+      "Rating": 2,
+      "WatchDate": [],
+      "Status": "watched_no_date",
+      "PriorWatch": true,
+      "ReleaseDate": "2011-04-01",
+      "Runtime": "01:33:00",
+      "Genre": "Sci-Fi, Thriller",
+      "Director": "Duncan Jones",
+      "Studio": "",
+      "Actors": "Jake Gyllenhaal, Michelle Monaghan, Vera Farmiga",
+      "Notes": ""
+    },
+    {
+      "Title": "Memento",
+      "Rating": 4,
+      "WatchDate": [],
+      "Status": "watched_no_date",
+      "PriorWatch": true,
+      "ReleaseDate": "2000-09-05",
+      "Runtime": "01:53:00",
+      "Genre": "Mystery, Thriller",
+      "Director": "Christopher Nolan",
+      "Studio": "Newmarket Films",
+      "Actors": "Guy Pearce, Carrie-Anne Moss, Joe Pantoliano",
+      "Notes": ""
     }
   ]
 }
