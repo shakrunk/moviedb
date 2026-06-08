@@ -549,14 +549,22 @@ body::before {
 
 .modal { position: fixed; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center; padding: 24px; pointer-events: none; }
 .modal.is-open { pointer-events: auto; }
-.modal__panel {
-  width: min(680px, 100%); max-height: 90vh; overflow-y: auto;
-  background: linear-gradient(180deg, var(--ink-2), var(--ink-1));
+/* .modal__clip: holds the visible shape (border-radius, shadow, clip).
+   overflow:clip (unlike overflow:hidden) does NOT create a scroll container,
+   so sticky children in the inner panel still work, but the scrollbar is
+   visually clipped to the rounded rectangle — fixes Firefox border-radius. */
+.modal__clip {
+  width: min(680px, 100%); max-height: 90vh;
   border: 1px solid var(--line-2); border-radius: var(--r-lg);
   box-shadow: var(--shadow-lift);
+  overflow: clip;
   opacity: 0; transform: translateY(24px) scale(0.97); transition: opacity 0.4s var(--ease), transform 0.4s var(--ease);
 }
-.modal.is-open .modal__panel { opacity: 1; transform: none; }
+.modal.is-open .modal__clip { opacity: 1; transform: none; }
+.modal__panel {
+  width: 100%; max-height: 90vh; overflow-y: auto;
+  background: linear-gradient(180deg, var(--ink-2), var(--ink-1));
+}
 .modal__head { display: flex; align-items: center; justify-content: space-between; padding: 22px 26px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--ink-2); z-index: 2; }
 .modal__head h2 { font-family: var(--display); font-weight: 400; font-size: 26px; font-variation-settings: "opsz" 60, "SOFT" 4, "WONK" 1; }
 .modal__head .kicker { margin-bottom: 4px; }
@@ -605,6 +613,8 @@ body::before {
 .dateadd .input { width: 150px; font-family: var(--mono); font-size: 12px; padding: 8px 10px; }
 
 .toggle { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
+/* .field label (specificity 0,1,1) beats .toggle (0,1,0) — override explicitly */
+.field .toggle { display: inline-flex; font-family: var(--ui); font-size: 13px; text-transform: none; letter-spacing: normal; color: var(--paper-dim); margin-bottom: 0; }
 .toggle input { display: none; }
 .toggle__track { width: 44px; height: 24px; border-radius: 999px; background: rgba(255,255,255,0.1); position: relative; transition: background 0.25s; }
 .toggle__track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--paper-dim); transition: transform 0.25s var(--ease), background 0.25s; }
