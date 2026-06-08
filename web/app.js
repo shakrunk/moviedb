@@ -399,9 +399,12 @@ async function loadPoster(el) {
   if (url === undefined && !posterTried.has(key)) {
     posterTried.add(key);
     try {
-      url = LOCAL_SERVER
-        ? (await api(`/api/poster?title=${encodeURIComponent(title)}&year=${encodeURIComponent(year)}`)).url || null
-        : await fetchITunesPoster(title, year);
+      if (LOCAL_SERVER) {
+        url = (await api(`/api/poster?title=${encodeURIComponent(title)}&year=${encodeURIComponent(year)}`)).url || null;
+        if (!url) url = await fetchITunesPoster(title, year);
+      } else {
+        url = await fetchITunesPoster(title, year);
+      }
       posterMemo.set(key, url);
     } catch (_) { url = null; }
   }
@@ -410,17 +413,68 @@ async function loadPoster(el) {
   if (img) { img.src = url; img.onload = () => el.classList.add('has-img'); }
 }
 
+/* JSONP fallback for iTunes — bypasses extension fetch interception (Firefox) */
+function itunesJsonp(url) {
+  return new Promise((resolve, reject) => {
+    const id = '_itcb' + (Date.now() & 0xffff);
+    const script = document.createElement('script');
+    let done = false;
+    function cleanup() { if (done) return; done = true; script.remove(); delete window[id]; }
+    const timer = setTimeout(() => { cleanup(); reject(new Error('timeout')); }, 8000);
+    window[id] = (data) => { clearTimeout(timer); cleanup(); resolve(data); };
+    script.onerror = () => { clearTimeout(timer); cleanup(); reject(new Error('load error')); };
+    script.src = `${url}&callback=${id}`;
+    document.head.appendChild(script);
+  });
+}
+
+/* ── OMDb (Open Movie Database) ───────────────────────────────────────── */
+// Free API key at https://www.omdbapi.com/apikey.aspx — stored in localStorage.
+const OMDB_STORE = 'proj_room_omdb';
+const getOmdbKey  = () => localStorage.getItem(OMDB_STORE) || '';
+const saveOmdbKey = (k) => k ? localStorage.setItem(OMDB_STORE, k.trim()) : localStorage.removeItem(OMDB_STORE);
+
+async function omdbFetch(params) {
+  const key = getOmdbKey();
+  if (!key) return null;
+  try {
+    const res = await fetch(`https://www.omdbapi.com/?${params}&apikey=${key}`);
+    if (!res.ok) return null;
+    const d = await res.json();
+    return d.Response === 'True' ? d : null;
+  } catch (_) { return null; }
+}
+function parseOmdbRuntime(str) {
+  const m = /(\d+)\s*min/i.exec(str || '');
+  if (!m) return '';
+  const mins = +m[1], h = Math.floor(mins / 60), mm = mins % 60;
+  return `${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00`;
+}
+function parseOmdbDate(str) {
+  if (!str || str === 'N/A') return '';
+  const d = new Date(str); return isNaN(d) ? '' : d.toISOString().slice(0, 10);
+}
+
+/* Poster fetch: OMDb exact lookup → iTunes fallback (entity=movie is broken;
+   filter by kind client-side instead). */
 async function fetchITunesPoster(title, year) {
+  let omdb = await omdbFetch(`t=${encodeURIComponent(title)}&y=${year || ''}&type=movie`);
+  // Year in the local DB may differ from OMDb's canonical release year — retry without year.
+  if (!omdb?.Poster || omdb.Poster === 'N/A') omdb = await omdbFetch(`t=${encodeURIComponent(title)}&type=movie`);
+  if (omdb?.Poster && omdb.Poster !== 'N/A') return omdb.Poster;
+
   const term = year ? `${title} ${year}` : title;
-  const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&country=US&entity=movie&limit=5`);
-  if (!res.ok) return null;
-  const data = await res.json();
-  if (!data.resultCount) return null;
-  let best = data.results.find((m) => m.artworkUrl100);
-  if (year) {
-    const ym = data.results.find((m) => m.artworkUrl100 && m.releaseDate?.startsWith(year));
-    if (ym) best = ym;
-  }
+  const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&limit=15`;
+  let data;
+  try { const res = await fetch(url); if (res.ok) data = await res.json(); } catch (_) {}
+  if (!data?.results?.length) { try { data = await itunesJsonp(url); } catch (_) { return null; } }
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const titleNorm = norm(title);
+  // Only accept results whose title actually contains the search title (prevents wrong-movie posters).
+  const movies = (data?.results || []).filter(r =>
+    r.kind === 'feature-movie' && r.artworkUrl100 && norm(r.trackName || '').includes(titleNorm));
+  if (!movies.length) return null;
+  const best = (year && movies.find(m => m.releaseDate?.startsWith(year))) || movies[0];
   return best?.artworkUrl100?.replace(/\d+x\d+bb/, '600x600bb') || null;
 }
 
@@ -541,9 +595,10 @@ function openDrawer(r) {
 async function loadDrawerPoster(r) {
   const y = yearOf(r), key = `${r.Title}|${y}`.toLowerCase();
   try {
-    const url = LOCAL_SERVER
+    let url = LOCAL_SERVER
       ? (await api(`/api/poster?title=${encodeURIComponent(r.Title)}&year=${encodeURIComponent(y)}`)).url || null
-      : await fetchITunesPoster(r.Title, y);
+      : null;
+    if (!url) url = await fetchITunesPoster(r.Title, y);
     posterMemo.set(key, url);
     if (url) { const p = $('.dr-poster'); if (p) p.innerHTML = `<img src="${esc(url)}" alt="">`; }
   } catch (_) {}
@@ -606,7 +661,7 @@ async function markWatched(r) {
 
 async function deleteMovie(r) {
   if (!LOCAL_SERVER) { toast('Deletion is read-only in the published archive', 'info'); return; }
-  if (!confirm(`Permanently remove “${r.Title}” from the archive?`)) return;
+  if (!confirm(`Permanently remove "${r.Title}" from the archive?`)) return;
   try {
     await api(`/api/movies/${r._idx}`, { method: 'DELETE' });
     closeDrawer();
@@ -756,13 +811,30 @@ async function doITunes() {
   box.innerHTML = `<div class="itunes-results" style="padding:16px;display:flex;align-items:center;gap:10px;color:var(--paper-dim)"><span class="spinner"></span> Searching the catalogue…</div>`;
   try {
     let results;
+    // Step 1: iTunes via local server (when running with the PowerShell host)
     if (LOCAL_SERVER) {
       results = await api(`/api/itunes?term=${encodeURIComponent(term)}`);
-    } else {
-      const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&country=US&entity=movie&limit=8`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      results = (data.results || []).map((m) => {
+    }
+    // Step 2: OMDb (primary for GitHub Pages; fallback for local server when iTunes is empty)
+    if (!results?.length && getOmdbKey()) {
+      const omdbSearch = await omdbFetch(`s=${encodeURIComponent(term)}&type=movie`);
+      if (omdbSearch?.Search?.length) {
+        results = omdbSearch.Search.map(m => ({
+          title: String(m.Title || ''),
+          year: String(m.Year || ''),
+          releaseDate: '', runtime: '', genre: '', director: '', notes: '',
+          poster: m.Poster && m.Poster !== 'N/A' ? m.Poster : null,
+          _imdbID: m.imdbID,
+        }));
+      }
+    }
+    // Step 3: iTunes direct (GitHub Pages only; entity=movie is broken — filter by kind)
+    if (!results?.length && !LOCAL_SERVER) {
+      const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&limit=20`;
+      let itunesData;
+      try { const res = await fetch(url); if (res.ok) itunesData = await res.json(); } catch (_) {}
+      if (!itunesData?.results?.length) { try { itunesData = await itunesJsonp(url); } catch (_) {} }
+      const mapItem = (m) => {
         let rt = '';
         if (m.trackTimeMillis) {
           const ts = Math.round(m.trackTimeMillis / 1000);
@@ -779,23 +851,71 @@ async function doITunes() {
           poster: m.artworkUrl100 ? m.artworkUrl100.replace(/\d+x\d+bb/, '600x600bb') : null,
           notes: String(m.longDescription || ''),
         };
-      });
+      };
+      results = (itunesData?.results || []).filter(r => r.kind === 'feature-movie').map(mapItem);
     }
-    if (!results || !results.length) { box.innerHTML = `<div class="field-hint" style="margin-top:8px">No online matches — fill the details by hand (the API may be unavailable).</div>`; return; }
+    if (!results || !results.length) {
+      if (!getOmdbKey()) {
+        const inp = Object.assign(document.createElement('input'), {
+          className: 'input', placeholder: 'Paste key from omdbapi.com/apikey.aspx…',
+        });
+        inp.style.cssText = 'flex:1;min-width:180px;font-size:12px;padding:8px 10px';
+        const btn = Object.assign(document.createElement('button'), {
+          className: 'btn btn--amber btn--sm', textContent: 'Save & retry',
+        });
+        btn.onclick = () => {
+          const k = inp.value.trim();
+          if (!k) { toast('Paste your OMDb key first', 'err'); return; }
+          saveOmdbKey(k); doITunes();
+        };
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:8px;margin-top:8px;flex-wrap:wrap';
+        row.append(inp, btn);
+        const hint = Object.assign(document.createElement('div'), { className: 'field-hint' });
+        hint.style.marginTop = '8px';
+        hint.append('No results from iTunes. For reliable lookups, add a free OMDb key:', row);
+        box.innerHTML = '';
+        box.appendChild(hint);
+      } else {
+        box.innerHTML = `<div class="field-hint" style="margin-top:8px">No online matches — fill the details by hand.</div>`;
+      }
+      return;
+    }
     box.innerHTML = `<div class="itunes-results">${results.map((m, i) => `
       <div class="itunes-row" data-i="${i}">
-        ${m.poster ? `<img src="${esc(m.poster)}" alt="">` : '<div style="width:38px;height:56px;border-radius:4px;background:var(--ink-3)"></div>'}
+        ${m.poster ? `<img src="${esc(m.poster)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''">` : ''}
+        <div style="${m.poster ? 'display:none' : ''};width:38px;height:56px;border-radius:4px;background:var(--ink-3);flex-shrink:0"></div>
         <div><div class="ir-t">${esc(m.title)}</div><div class="ir-m">${[m.year, m.director, m.genre].filter(Boolean).map(esc).join(' · ')}</div></div>
       </div>`).join('')}</div>`;
-    $$('#itunesBox .itunes-row').forEach((row) => row.onclick = () => {
+    $$('.itunes-row', box).forEach((row) => row.onclick = async () => {
       const m = results[+row.dataset.i];
-      if (m.releaseDate) $('#fRelease').value = m.releaseDate;
-      if (m.runtime) $('#fRuntime').value = m.runtime;
-      if (m.genre) $('#fGenre').value = m.genre;
-      if (m.director) $('#fDirector').value = m.director;
-      if (m.notes && !$('#fNotes').value) $('#fNotes').value = m.notes;
       if (!$('#fTitle').value) $('#fTitle').value = m.title;
-      box.innerHTML = `<div class="field-hint" style="margin-top:8px;color:var(--amber)">${icon('check')} Metadata filled from “${esc(m.title)}”.</div>`;
+      if (m._imdbID) {
+        // OMDb result — fetch full details (runtime, genre, director, etc.)
+        box.innerHTML = `<div class="field-hint" style="margin-top:8px;display:flex;align-items:center;gap:8px"><span class="spinner"></span> Loading details…</div>`;
+        const detail = await omdbFetch(`i=${m._imdbID}`);
+        if (detail) {
+          const rd = parseOmdbDate(detail.Released), rt = parseOmdbRuntime(detail.Runtime);
+          if (rd) $('#fRelease').value = rd;
+          if (rt) $('#fRuntime').value = rt;
+          if (detail.Genre     && detail.Genre     !== 'N/A') $('#fGenre').value    = detail.Genre;
+          if (detail.Director  && detail.Director  !== 'N/A') $('#fDirector').value = detail.Director;
+          const actors = $('#fActors');
+          if (!actors.value && detail.Actors && detail.Actors !== 'N/A') actors.value = detail.Actors;
+          const notes = $('#fNotes');
+          if (!notes.value && detail.Plot && detail.Plot !== 'N/A') notes.value = detail.Plot;
+          const studio = $('#fStudio');
+          if (!studio.value && detail.Production && detail.Production !== 'N/A') studio.value = detail.Production;
+        }
+      } else {
+        // iTunes result — all fields available immediately
+        if (m.releaseDate) $('#fRelease').value = m.releaseDate;
+        if (m.runtime)     $('#fRuntime').value = m.runtime;
+        if (m.genre)       $('#fGenre').value   = m.genre;
+        if (m.director)    $('#fDirector').value = m.director;
+        if (m.notes && !$('#fNotes').value) $('#fNotes').value = m.notes;
+      }
+      box.innerHTML = `<div class="field-hint" style="margin-top:8px;color:var(--amber);display:flex;align-items:center;gap:6px"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><use href="#ic-check"/></svg> Metadata filled from "${esc(m.title)}".</div>`;
     });
   } catch (e) {
     box.innerHTML = `<div class="field-hint" style="margin-top:8px">Lookup unavailable — ${esc(e.message)}</div>`;
