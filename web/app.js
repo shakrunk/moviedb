@@ -30,6 +30,9 @@ const state = {
 const posterMemo = new Map();    // "title|year" -> url|null
 const posterTried = new Set();
 
+// True when running behind the local PowerShell server; false on GitHub Pages / any static host.
+const LOCAL_SERVER = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
 /* ── domain helpers ───────────────────────────────────────────────────── */
 const yearOf = (r) => { const m = /(\d{4})/.exec(r.ReleaseDate || ''); return m ? m[1] : ''; };
 const genresOf = (r) => (r.Genre || '').split(',').map((g) => g.trim()).filter(Boolean);
@@ -97,7 +100,13 @@ function starsHTML(rating, { interactive = false } = {}) {
 
 /* ── data load ────────────────────────────────────────────────────────── */
 async function loadDb() {
-  state.db = await api('/api/db');
+  if (LOCAL_SERVER) {
+    state.db = await api('/api/db');
+  } else {
+    const res = await fetch('movies.json');
+    if (!res.ok) throw new Error(`Could not load movies.json (${res.status})`);
+    state.db = await res.json();
+  }
   state.records = (state.db.log || []).map((r, i) => ({ ...r, _idx: i }));
 }
 
@@ -390,13 +399,29 @@ async function loadPoster(el) {
   if (url === undefined && !posterTried.has(key)) {
     posterTried.add(key);
     try {
-      const res = await api(`/api/poster?title=${encodeURIComponent(title)}&year=${encodeURIComponent(year)}`);
-      url = res.url || null; posterMemo.set(key, url);
+      url = LOCAL_SERVER
+        ? (await api(`/api/poster?title=${encodeURIComponent(title)}&year=${encodeURIComponent(year)}`)).url || null
+        : await fetchITunesPoster(title, year);
+      posterMemo.set(key, url);
     } catch (_) { url = null; }
   }
   if (!url) return;
   const img = $('.poster__img', el) || $('img', el);
   if (img) { img.src = url; img.onload = () => el.classList.add('has-img'); }
+}
+
+async function fetchITunesPoster(title, year) {
+  const term = year ? `${title} ${year}` : title;
+  const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&country=US&entity=movie&limit=5`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  if (!data.resultCount) return null;
+  let best = data.results.find((m) => m.artworkUrl100);
+  if (year) {
+    const ym = data.results.find((m) => m.artworkUrl100 && m.releaseDate?.startsWith(year));
+    if (ym) best = ym;
+  }
+  return best?.artworkUrl100?.replace(/\d+x\d+bb/, '600x600bb') || null;
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -516,9 +541,11 @@ function openDrawer(r) {
 async function loadDrawerPoster(r) {
   const y = yearOf(r), key = `${r.Title}|${y}`.toLowerCase();
   try {
-    const res = await api(`/api/poster?title=${encodeURIComponent(r.Title)}&year=${encodeURIComponent(y)}`);
-    posterMemo.set(key, res.url || null);
-    if (res.url) { const p = $('.dr-poster'); if (p) p.innerHTML = `<img src="${esc(res.url)}" alt="">`; }
+    const url = LOCAL_SERVER
+      ? (await api(`/api/poster?title=${encodeURIComponent(r.Title)}&year=${encodeURIComponent(y)}`)).url || null
+      : await fetchITunesPoster(r.Title, y);
+    posterMemo.set(key, url);
+    if (url) { const p = $('.dr-poster'); if (p) p.innerHTML = `<img src="${esc(url)}" alt="">`; }
   } catch (_) {}
 }
 function closeDrawer() {
@@ -551,6 +578,7 @@ async function reloadAndRender() {
 }
 
 async function quickRate(r, n) {
+  if (!LOCAL_SERVER) { toast('Rating is read-only in the published archive', 'info'); return; }
   try {
     const next = { ...r, Rating: r.Rating === n ? null : n };
     state.db = await api(`/api/movies/${r._idx}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) });
@@ -562,6 +590,7 @@ async function quickRate(r, n) {
 }
 
 async function markWatched(r) {
+  if (!LOCAL_SERVER) { toast('Logging is read-only in the published archive', 'info'); return; }
   try {
     const today = new Date().toISOString().slice(0, 10);
     const dates = [...new Set([...watchDates(r), today])].sort();
@@ -576,6 +605,7 @@ async function markWatched(r) {
 }
 
 async function deleteMovie(r) {
+  if (!LOCAL_SERVER) { toast('Deletion is read-only in the published archive', 'info'); return; }
   if (!confirm(`Permanently remove “${r.Title}” from the archive?`)) return;
   try {
     await api(`/api/movies/${r._idx}`, { method: 'DELETE' });
@@ -590,6 +620,7 @@ async function deleteMovie(r) {
    ════════════════════════════════════════════════════════════════════════ */
 let modalState = null;
 function openModal(rec = null) {
+  if (!LOCAL_SERVER) { toast('The published archive is read-only', 'info'); return; }
   const isNew = !rec;
   modalState = {
     isNew, idx: rec ? rec._idx : null,
@@ -724,7 +755,32 @@ async function doITunes() {
   const box = $('#itunesBox');
   box.innerHTML = `<div class="itunes-results" style="padding:16px;display:flex;align-items:center;gap:10px;color:var(--paper-dim)"><span class="spinner"></span> Searching the catalogue…</div>`;
   try {
-    const results = await api(`/api/itunes?term=${encodeURIComponent(term)}`);
+    let results;
+    if (LOCAL_SERVER) {
+      results = await api(`/api/itunes?term=${encodeURIComponent(term)}`);
+    } else {
+      const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&country=US&entity=movie&limit=8`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      results = (data.results || []).map((m) => {
+        let rt = '';
+        if (m.trackTimeMillis) {
+          const ts = Math.round(m.trackTimeMillis / 1000);
+          const h = Math.floor(ts / 3600), mm = Math.floor((ts % 3600) / 60), ss = ts % 60;
+          rt = `${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+        }
+        return {
+          title: String(m.trackName || ''),
+          year: m.releaseDate ? m.releaseDate.substring(0, 4) : '',
+          releaseDate: m.releaseDate ? m.releaseDate.substring(0, 10) : '',
+          runtime: rt,
+          genre: String(m.primaryGenreName || ''),
+          director: String(m.directorName || m.artistName || ''),
+          poster: m.artworkUrl100 ? m.artworkUrl100.replace(/\d+x\d+bb/, '600x600bb') : null,
+          notes: String(m.longDescription || ''),
+        };
+      });
+    }
     if (!results || !results.length) { box.innerHTML = `<div class="field-hint" style="margin-top:8px">No online matches — fill the details by hand (the API may be unavailable).</div>`; return; }
     box.innerHTML = `<div class="itunes-results">${results.map((m, i) => `
       <div class="itunes-row" data-i="${i}">
@@ -747,6 +803,7 @@ async function doITunes() {
 }
 
 async function saveMovie() {
+  if (!LOCAL_SERVER) { toast('Editing is read-only in the published archive', 'info'); return; }
   const rec = {
     Title: $('#fTitle').value.trim(),
     Rating: modalState.rating,
@@ -786,9 +843,20 @@ function closeModal() {
    ════════════════════════════════════════════════════════════════════════ */
 async function exportLLM() {
   try {
-    const res = await api('/api/export/llm');
-    await navigator.clipboard.writeText(res.text);
-    toast(`Copied ${res.count} records + command reference for your LLM`, 'ok');
+    let text, count;
+    if (LOCAL_SERVER) {
+      const res = await api('/api/export/llm');
+      text = res.text; count = res.count;
+    } else {
+      const min = state.records.map((r) => ({
+        Title: r.Title, ReleaseDate: r.ReleaseDate, WatchDate: r.WatchDate,
+        Status: r.Status, PriorWatch: r.PriorWatch, Rating: r.Rating, Notes: r.Notes,
+      }));
+      text = JSON.stringify({ _metadata: state.db._metadata, log: min }, null, 2);
+      count = min.length;
+    }
+    await navigator.clipboard.writeText(text);
+    toast(`Copied ${count} records + command reference for your LLM`, 'ok');
   } catch (e) {
     toast(`Copy failed — ${e.message}`, 'err');
   }
@@ -805,6 +873,7 @@ function surprise() {
 }
 
 async function closeRoom() {
+  if (!LOCAL_SERVER) return;
   if (!confirm('Close the projection room? This stops the local server.')) return;
   try { await api('/api/shutdown', { method: 'POST' }); } catch (_) {}
   document.body.innerHTML = `<div style="height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center;font-family:var(--display)">
@@ -835,6 +904,10 @@ function wireGlobal() {
   $('#btnExport').onclick = exportLLM;
   $('#btnSurprise').onclick = surprise;
   $('#btnClose').onclick = closeRoom;
+  if (!LOCAL_SERVER) {
+    $('#btnAdd').hidden = true;
+    $('#btnClose').hidden = true;
+  }
   $('#btnSearch').onclick = () => { setView('library'); setTimeout(() => $('#searchInput').focus(), 60); };
 
   // search
