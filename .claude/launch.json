@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "projection-room",
+      "runtimeExecutable": "pwsh",
+      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "MovieTrackerWeb.ps1", "-NoBrowser", "-Port", "7777"],
+      "port": 7777
+    }
+  ]
+}
