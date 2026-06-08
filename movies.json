@@ -113,15 +113,15 @@
       "Notes": ""
     },
     {
-      "Title": "A Bugs Life",
+      "Title": "A Bug's Life",
       "Rating": 4,
       "WatchDate": [],
       "Status": "watched_no_date",
       "PriorWatch": true,
       "ReleaseDate": "1998-11-25",
       "Runtime": "01:35:00",
-      "Genre": "Adventure, Animation, Comedy, Family",
-      "Director": "John Lasseter",
+      "Genre": "Animation, Adventure, Comedy",
+      "Director": "John Lasseter, Andrew Stanton",
       "Studio": "Pixar Animation Studios, Walt Disney Pictures",
       "Actors": "Dave Foley, Kevin Spacey, Julia Louis-Dreyfus, Hayden Panettiere, Phyllis Diller",
       "Notes": ""
@@ -532,7 +532,7 @@
     },
     {
       "Title": "The Substance",
-      "Rating": null,
+      "Rating": 2,
       "WatchDate": [
         "2025-12-01"
       ],
@@ -544,7 +544,7 @@
       "Director": "Coralie Fargeat",
       "Studio": "Working Title Films, Blacksmith",
       "Actors": "Demi Moore, Margaret Qualley, Dennis Quaid",
-      "Notes": ""
+      "Notes": "Social commentary is strong.  Still would rather not watch again.  I think body horror is probably just not my thing."
     },
     {
       "Title": "Batman: Hush",
@@ -660,7 +660,7 @@
     },
     {
       "Title": "The Prestige",
-      "Rating": 4,
+      "Rating": 3,
       "WatchDate": [],
       "Status": "watched_no_date",
       "PriorWatch": true,
@@ -743,6 +743,22 @@
       "Studio": "Newmarket Films",
       "Actors": "Guy Pearce, Carrie-Anne Moss, Joe Pantoliano",
       "Notes": ""
+    },
+    {
+      "Title": "Paddington",
+      "Rating": 4,
+      "WatchDate": [
+        "2026-06-08"
+      ],
+      "Status": "watched",
+      "PriorWatch": null,
+      "ReleaseDate": "2015-01-16",
+      "Runtime": "01:35:00",
+      "Genre": "Adventure, Comedy, Family",
+      "Director": "Paul King",
+      "Studio": "Heyday Films",
+      "Actors": "Tim Downie, Madeleine Worrall, Lottie Steer",
+      "Notes": "Warm and fun"
     }
   ]
 }
