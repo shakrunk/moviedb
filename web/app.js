@@ -1,20 +1,30 @@
 /* ════════════════════════════════════════════════════════════════════════
    THE PROJECTION ROOM — client
    ════════════════════════════════════════════════════════════════════════ */
-'use strict';
+"use strict";
 
 /* ── tiny helpers ─────────────────────────────────────────────────────── */
-const $  = (s, r = document) => r.querySelector(s);
+const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
-  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-${name}"/></svg>`;
+const esc = (s) =>
+  String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
+const icon = (name) =>
+  `<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-${name}"/></svg>`;
 
 async function api(path, opts) {
   const res = await fetch(path, opts);
   let data = null;
-  try { data = await res.json(); } catch (_) {}
-  if (!res.ok) throw new Error((data && data.error) || `Request failed (${res.status})`);
+  try {
+    data = await res.json();
+  } catch (_) {}
+  if (!res.ok)
+    throw new Error((data && data.error) || `Request failed (${res.status})`);
   return data;
 }
 
@@ -22,78 +32,133 @@ async function api(path, opts) {
 const state = {
   db: null,
   records: [],
-  view: 'dashboard',
-  mode: 'wall',
-  sort: 'added-desc',
-  filters: { search: '', status: 'all', genres: new Set(), minRating: 0, decade: null },
+  view: "dashboard",
+  mode: "wall",
+  sort: "added-desc",
+  filters: {
+    search: "",
+    status: "all",
+    genres: new Set(),
+    minRating: 0,
+    decade: null,
+  },
 };
-const posterMemo = new Map();    // "title|year" -> url|null
+const posterMemo = new Map(); // "title|year" -> url|null
 const posterTried = new Set();
 
 // True when running behind the local PowerShell server; false on GitHub Pages / any static host.
-const LOCAL_SERVER = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const LOCAL_SERVER = ["localhost", "127.0.0.1"].includes(
+  window.location.hostname,
+);
 
 /* ── domain helpers ───────────────────────────────────────────────────── */
-const yearOf = (r) => { const m = /(\d{4})/.exec(r.ReleaseDate || ''); return m ? m[1] : ''; };
-const genresOf = (r) => (r.Genre || '').split(',').map((g) => g.trim()).filter(Boolean);
-const watchDates = (r) => (Array.isArray(r.WatchDate) ? r.WatchDate : (r.WatchDate ? [r.WatchDate] : [])).filter(Boolean);
-const lastWatch = (r) => { const d = watchDates(r).slice().sort(); return d.length ? d[d.length - 1] : ''; };
+const yearOf = (r) => {
+  const m = /(\d{4})/.exec(r.ReleaseDate || "");
+  return m ? m[1] : "";
+};
+const genresOf = (r) =>
+  (r.Genre || "")
+    .split(",")
+    .map((g) => g.trim())
+    .filter(Boolean);
+const watchDates = (r) =>
+  (Array.isArray(r.WatchDate)
+    ? r.WatchDate
+    : r.WatchDate
+      ? [r.WatchDate]
+      : []
+  ).filter(Boolean);
+const lastWatch = (r) => {
+  const d = watchDates(r).slice().sort();
+  return d.length ? d[d.length - 1] : "";
+};
 // A meaningful re-watch: more than one logged viewing, or a dated watch of a film you'd seen before.
 // (watched_no_date entries are PriorWatch=true by convention, so we don't flag those as "re-watches".)
-const isRewatch = (r) => watchDates(r).length > 1 || (r.Status === 'watched' && r.PriorWatch === true);
+const isRewatch = (r) =>
+  watchDates(r).length > 1 || (r.Status === "watched" && r.PriorWatch === true);
 
 function runtimeMin(r) {
-  const m = /^(\d+):(\d+)(?::(\d+))?$/.exec((r.Runtime || '').trim());
+  const m = /^(\d+):(\d+)(?::(\d+))?$/.exec((r.Runtime || "").trim());
   if (!m) return 0;
-  return (+m[1]) * 60 + (+m[2]) + (m[3] ? Math.round(+m[3] / 60) : 0);
+  return +m[1] * 60 + +m[2] + (m[3] ? Math.round(+m[3] / 60) : 0);
 }
 function fmtRuntime(r) {
   const t = runtimeMin(r);
-  if (!t) return '';
-  const h = Math.floor(t / 60), mm = t % 60;
-  return h ? `${h}h ${mm.toString().padStart(2, '0')}m` : `${mm}m`;
+  if (!t) return "";
+  const h = Math.floor(t / 60),
+    mm = t % 60;
+  return h ? `${h}h ${mm.toString().padStart(2, "0")}m` : `${mm}m`;
 }
 const seenCount = (r) =>
-  r.Status === 'watched' ? Math.max(watchDates(r).length, 1) : (r.Status === 'watched_no_date' ? 1 : 0);
+  r.Status === "watched"
+    ? Math.max(watchDates(r).length, 1)
+    : r.Status === "watched_no_date"
+      ? 1
+      : 0;
 
 const STATUS = {
-  watched:         { label: 'Watched',   short: 'Seen' },
-  watched_no_date: { label: 'Archive',   short: 'Archive' },
-  want_to_watch:   { label: 'Watchlist', short: 'Queued' },
+  watched: { label: "Watched", short: "Seen" },
+  watched_no_date: { label: "Archive", short: "Archive" },
+  want_to_watch: { label: "Watchlist", short: "Queued" },
 };
 
 /* genre → muted duotone tint */
 const TINTS = {
-  'science fiction': '#6f8fa6', 'sci-fi': '#6f8fa6', 'drama': '#b5895a', 'thriller': '#7d7088',
-  'mystery': '#5f7d85', 'action': '#b3654a', 'adventure': '#8c8550', 'comedy': '#c39a4e',
-  'crime': '#8c5a52', 'horror': '#7e4a48', 'romance': '#b26a78', 'animation': '#6a93a1',
-  'family': '#7fa069', 'fantasy': '#8a6fa0', 'documentary': '#9a8f78', 'survival': '#9a7a4a',
-  'short': '#88808f', 'war': '#74705a', 'western': '#a9794c',
+  "science fiction": "#6f8fa6",
+  "sci-fi": "#6f8fa6",
+  drama: "#b5895a",
+  thriller: "#7d7088",
+  mystery: "#5f7d85",
+  action: "#b3654a",
+  adventure: "#8c8550",
+  comedy: "#c39a4e",
+  crime: "#8c5a52",
+  horror: "#7e4a48",
+  romance: "#b26a78",
+  animation: "#6a93a1",
+  family: "#7fa069",
+  fantasy: "#8a6fa0",
+  documentary: "#9a8f78",
+  survival: "#9a7a4a",
+  short: "#88808f",
+  war: "#74705a",
+  western: "#a9794c",
 };
-const tintOf = (r) => { const g = (genresOf(r)[0] || '').toLowerCase(); return TINTS[g] || '#6b7480'; };
+const tintOf = (r) => {
+  const g = (genresOf(r)[0] || "").toLowerCase();
+  return TINTS[g] || "#6b7480";
+};
 
 function relDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso + 'T00:00:00');
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
   if (isNaN(d)) return iso;
   const days = Math.round((Date.now() - d.getTime()) / 86400000);
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
   if (days < 30) return `${days} days ago`;
-  if (days < 365) { const m = Math.round(days / 30); return `${m} month${m > 1 ? 's' : ''} ago`; }
-  const y = Math.round(days / 365); return `${y} year${y > 1 ? 's' : ''} ago`;
+  if (days < 365) {
+    const m = Math.round(days / 30);
+    return `${m} month${m > 1 ? "s" : ""} ago`;
+  }
+  const y = Math.round(days / 365);
+  return `${y} year${y > 1 ? "s" : ""} ago`;
 }
 function prettyDate(iso) {
-  const d = new Date(iso + 'T00:00:00');
+  const d = new Date(iso + "T00:00:00");
   if (isNaN(d)) return iso;
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 }
 
 function starsHTML(rating, { interactive = false } = {}) {
-  let h = '';
+  let h = "";
   for (let i = 1; i <= 5; i++) {
     const on = rating && i <= rating;
-    h += `<svg class="${on ? '' : 'empty'}" ${interactive ? `data-n="${i}"` : ''} viewBox="0 0 24 24"><use href="#ic-star-${on ? 'fill' : 'fill'}"/></svg>`;
+    h += `<svg class="${on ? "" : "empty"}" ${interactive ? `data-n="${i}"` : ""} viewBox="0 0 24 24"><use href="#ic-star-${on ? "fill" : "fill"}"/></svg>`;
   }
   return h;
 }
@@ -101,9 +166,9 @@ function starsHTML(rating, { interactive = false } = {}) {
 /* ── data load ────────────────────────────────────────────────────────── */
 async function loadDb() {
   if (LOCAL_SERVER) {
-    state.db = await api('/api/db');
+    state.db = await api("/api/db");
   } else {
-    const res = await fetch('movies.json');
+    const res = await fetch("movies.json");
     if (!res.ok) throw new Error(`Could not load movies.json (${res.status})`);
     state.db = await res.json();
   }
@@ -117,15 +182,20 @@ function filtered() {
   const f = state.filters;
   const q = f.search.trim().toLowerCase();
   let rows = state.records.filter((r) => {
-    if (f.status !== 'all' && r.Status !== f.status) return false;
+    if (f.status !== "all" && r.Status !== f.status) return false;
     if (f.minRating && !(r.Rating >= f.minRating)) return false;
     if (f.genres.size) {
       const gs = genresOf(r).map((g) => g.toLowerCase());
       if (![...f.genres].some((g) => gs.includes(g))) return false;
     }
-    if (f.decade != null) { const y = +yearOf(r); if (!(y >= f.decade && y < f.decade + 10)) return false; }
+    if (f.decade != null) {
+      const y = +yearOf(r);
+      if (!(y >= f.decade && y < f.decade + 10)) return false;
+    }
     if (q) {
-      const hay = [r.Title, r.Director, r.Genre, r.Actors, r.Studio, r.Notes].join(' ').toLowerCase();
+      const hay = [r.Title, r.Director, r.Genre, r.Actors, r.Studio, r.Notes]
+        .join(" ")
+        .toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -133,16 +203,17 @@ function filtered() {
 
   const byNum = (sel, dir) => (a, b) => (sel(b) - sel(a)) * dir;
   const sorters = {
-    'added-desc': (a, b) => b._idx - a._idx,
-    'watch-desc': (a, b) => (lastWatch(b) || '').localeCompare(lastWatch(a) || ''),
-    'rating-desc': byNum((r) => r.Rating || 0, 1),
-    'rating-asc':  byNum((r) => r.Rating || 99, -1),
-    'title-asc': (a, b) => a.Title.localeCompare(b.Title),
-    'year-desc': byNum((r) => +yearOf(r) || 0, 1),
-    'year-asc':  byNum((r) => +yearOf(r) || 9999, -1),
-    'runtime-desc': byNum(runtimeMin, 1),
+    "added-desc": (a, b) => b._idx - a._idx,
+    "watch-desc": (a, b) =>
+      (lastWatch(b) || "").localeCompare(lastWatch(a) || ""),
+    "rating-desc": byNum((r) => r.Rating || 0, 1),
+    "rating-asc": byNum((r) => r.Rating || 99, -1),
+    "title-asc": (a, b) => a.Title.localeCompare(b.Title),
+    "year-desc": byNum((r) => +yearOf(r) || 0, 1),
+    "year-asc": byNum((r) => +yearOf(r) || 9999, -1),
+    "runtime-desc": byNum(runtimeMin, 1),
   };
-  rows.sort(sorters[state.sort] || sorters['added-desc']);
+  rows.sort(sorters[state.sort] || sorters["added-desc"]);
   return rows;
 }
 
@@ -150,49 +221,82 @@ function filtered() {
    RENDER — top level
    ════════════════════════════════════════════════════════════════════════ */
 function render() {
-  $$('.navtab').forEach((t) => t.classList.toggle('is-active', t.dataset.go === state.view));
-  $('#view-dashboard').hidden = state.view !== 'dashboard';
-  $('#view-library').hidden = state.view !== 'library';
+  $$(".navtab").forEach((t) =>
+    t.classList.toggle("is-active", t.dataset.go === state.view),
+  );
+  $("#view-dashboard").hidden = state.view !== "dashboard";
+  $("#view-library").hidden = state.view !== "library";
   document.body.dataset.view = state.view;
-  if (state.view === 'dashboard') renderDashboard();
+  if (state.view === "dashboard") renderDashboard();
   else renderLibrary();
 }
 
-function setView(v) { state.view = v; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+function setView(v) {
+  state.view = v;
+  render();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
 
 /* ════════════════════════════════════════════════════════════════════════
    DASHBOARD
    ════════════════════════════════════════════════════════════════════════ */
 function renderDashboard() {
   const recs = state.records;
-  const seen = recs.filter((r) => r.Status !== 'want_to_watch');
+  const seen = recs.filter((r) => r.Status !== "want_to_watch");
   const rated = recs.filter((r) => r.Rating);
-  const avg = rated.length ? (rated.reduce((s, r) => s + r.Rating, 0) / rated.length) : 0;
+  const avg = rated.length
+    ? rated.reduce((s, r) => s + r.Rating, 0) / rated.length
+    : 0;
   const totalMin = recs.reduce((s, r) => s + runtimeMin(r) * seenCount(r), 0);
   const hours = Math.round(totalMin / 60);
   const thisYear = new Date().getFullYear();
-  const seenThisYear = recs.reduce((s, r) => s + watchDates(r).filter((d) => d.startsWith(thisYear)).length, 0);
-  const watchlist = recs.filter((r) => r.Status === 'want_to_watch').length;
+  const seenThisYear = recs.reduce(
+    (s, r) => s + watchDates(r).filter((d) => d.startsWith(thisYear)).length,
+    0,
+  );
+  const watchlist = recs.filter((r) => r.Status === "want_to_watch").length;
 
-  $('#todayStr').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-  $('#dashLede').innerHTML =
+  $("#todayStr").textContent = new Date().toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+  $("#dashLede").innerHTML =
     `<strong>${recs.length} titles</strong> rest in the archive — ${seen.length} already seen` +
-    (watchlist ? `, <strong>${watchlist}</strong> waiting in the wings` : '') +
+    (watchlist ? `, <strong>${watchlist}</strong> waiting in the wings` : "") +
     `. That's <strong>${hours.toLocaleString()} hours</strong> in the dark, with the average picture earning ` +
-    `<strong>${avg ? avg.toFixed(1) : '—'}</strong> of five.`;
+    `<strong>${avg ? avg.toFixed(1) : "—"}</strong> of five.`;
 
   const stat = (ic, num, unit, label, sub) => `
     <div class="stat-card">
       <svg class="stat-icon" viewBox="0 0 24 24"><use href="#ic-${ic}"/></svg>
-      <div class="stat-num">${num}${unit ? `<span class="unit">${unit}</span>` : ''}</div>
-      <div class="stat-label">${label}</div>${sub ? `<div class="stat-sub">${sub}</div>` : ''}
+      <div class="stat-num">${num}${unit ? `<span class="unit">${unit}</span>` : ""}</div>
+      <div class="stat-label">${label}</div>${sub ? `<div class="stat-sub">${sub}</div>` : ""}
     </div>`;
-  $('#statStrip').innerHTML =
-    stat('reel', recs.length, '', 'Titles in the archive') +
-    stat('clock', hours.toLocaleString(), 'hrs', 'Hours in the dark', `${(totalMin / 60 / 24).toFixed(1)} days of cinema`) +
-    stat('star', avg ? avg.toFixed(1) : '—', avg ? '/5' : '', 'Average rating', `${rated.length} rated`) +
-    stat('calendar', seenThisYear, '', `Screenings in ${thisYear}`) +
-    stat('eye', watchlist, '', 'On the watchlist', watchlist ? 'ready when you are' : 'all caught up');
+  $("#statStrip").innerHTML =
+    stat("reel", recs.length, "", "Titles in the archive") +
+    stat(
+      "clock",
+      hours.toLocaleString(),
+      "hrs",
+      "Hours in the dark",
+      `${(totalMin / 60 / 24).toFixed(1)} days of cinema`,
+    ) +
+    stat(
+      "star",
+      avg ? avg.toFixed(1) : "—",
+      avg ? "/5" : "",
+      "Average rating",
+      `${rated.length} rated`,
+    ) +
+    stat("calendar", seenThisYear, "", `Screenings in ${thisYear}`) +
+    stat(
+      "eye",
+      watchlist,
+      "",
+      "On the watchlist",
+      watchlist ? "ready when you are" : "all caught up",
+    );
 
   renderRatings(recs);
   renderGenreBars(recs);
@@ -205,10 +309,11 @@ function renderRatings(recs) {
   const counts = [0, 0, 0, 0, 0, 0]; // index 0 = unrated
   recs.forEach((r) => counts[r.Rating || 0]++);
   const max = Math.max(1, ...counts.slice(1), counts[0]);
-  let h = '';
+  let h = "";
   for (let s = 5; s >= 1; s--) {
-    let stars = '';
-    for (let i = 0; i < 5; i++) stars += `<svg class="${i < s ? '' : 'empty'}" viewBox="0 0 24 24" style="color:${i < s ? '' : 'rgba(255,255,255,.12)'}"><use href="#ic-star-fill"/></svg>`;
+    let stars = "";
+    for (let i = 0; i < 5; i++)
+      stars += `<svg class="${i < s ? "" : "empty"}" viewBox="0 0 24 24" style="color:${i < s ? "" : "rgba(255,255,255,.12)"}"><use href="#ic-star-fill"/></svg>`;
     h += `<div class="rrow"><div class="rrow__stars">${stars}</div>
       <div class="rrow__track"><div class="rrow__fill" style="width:${(counts[s] / max) * 100}%;animation-delay:${(5 - s) * 70}ms"></div></div>
       <div class="rrow__val">${counts[s]}</div></div>`;
@@ -216,87 +321,142 @@ function renderRatings(recs) {
   h += `<div class="rrow"><div class="rrow__stars" style="font-family:var(--mono);font-size:11px;color:var(--paper-faint);align-items:center">unrated</div>
     <div class="rrow__track"><div class="rrow__fill" style="width:${(counts[0] / max) * 100}%;background:linear-gradient(90deg,#3a332c,#6f655a);animation-delay:380ms"></div></div>
     <div class="rrow__val">${counts[0]}</div></div>`;
-  $('#ratingsChart').innerHTML = h;
+  $("#ratingsChart").innerHTML = h;
 }
 
 function renderGenreBars(recs) {
   const tally = {};
-  recs.forEach((r) => genresOf(r).forEach((g) => { tally[g] = (tally[g] || 0) + 1; }));
-  const top = Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  recs.forEach((r) =>
+    genresOf(r).forEach((g) => {
+      tally[g] = (tally[g] || 0) + 1;
+    }),
+  );
+  const top = Object.entries(tally)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
   const max = Math.max(1, ...top.map((t) => t[1]));
-  $('#genreBars').innerHTML = top.map(([g, n], i) => {
-    const tint = TINTS[g.toLowerCase()] || '#9a8f78';
-    return `<div class="gbar" data-genre="${esc(g.toLowerCase())}">
+  $("#genreBars").innerHTML = top
+    .map(([g, n], i) => {
+      const tint = TINTS[g.toLowerCase()] || "#9a8f78";
+      return `<div class="gbar" data-genre="${esc(g.toLowerCase())}">
       <div class="gbar__name">${esc(g)}</div>
       <div class="gbar__track"><div class="gbar__fill" style="width:${(n / max) * 100}%;background:linear-gradient(90deg,${tint}88,${tint});animation-delay:${i * 60}ms"></div></div>
       <div class="gbar__val">${n}</div></div>`;
-  }).join('');
-  $$('#genreBars .gbar').forEach((el) => el.onclick = () => {
-    state.filters.genres = new Set([el.dataset.genre]);
-    setView('library'); syncFilterUI();
-  });
+    })
+    .join("");
+  $$("#genreBars .gbar").forEach(
+    (el) =>
+      (el.onclick = () => {
+        state.filters.genres = new Set([el.dataset.genre]);
+        setView("library");
+        syncFilterUI();
+      }),
+  );
 }
 
 function renderTimeline(recs) {
   const all = [];
   recs.forEach((r) => watchDates(r).forEach((d) => all.push(d.slice(0, 7))));
-  const panel = $('.panel--timeline');
-  if (!all.length) { panel.hidden = true; return; }
+  const panel = $(".panel--timeline");
+  if (!all.length) {
+    panel.hidden = true;
+    return;
+  }
   panel.hidden = false;
   const counts = {};
-  all.forEach((m) => counts[m] = (counts[m] || 0) + 1);
+  all.forEach((m) => (counts[m] = (counts[m] || 0) + 1));
   const keys = Object.keys(counts).sort();
-  const [sy, sm] = keys[0].split('-').map(Number);
-  const [ey, em] = keys[keys.length - 1].split('-').map(Number);
+  const [sy, sm] = keys[0].split("-").map(Number);
+  const [ey, em] = keys[keys.length - 1].split("-").map(Number);
   const months = [];
-  let y = sy, m = sm;
+  let y = sy,
+    m = sm;
   while (y < ey || (y === ey && m <= em)) {
-    months.push(`${y}-${String(m).padStart(2, '0')}`);
-    m++; if (m > 12) { m = 1; y++; }
+    months.push(`${y}-${String(m).padStart(2, "0")}`);
+    m++;
+    if (m > 12) {
+      m = 1;
+      y++;
+    }
   }
   const max = Math.max(1, ...Object.values(counts));
   const showLbl = months.length > 14 ? 3 : 1;
-  $('#timeline').innerHTML = months.map((mo, i) => {
-    const c = counts[mo] || 0;
-    const [yy, mm] = mo.split('-');
-    const lbl = (i % showLbl === 0) ? `${['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mm]} '${yy.slice(2)}` : '';
-    return `<div class="tcol" title="${c} screening${c !== 1 ? 's' : ''} · ${mo}">
-      <div class="tcol__cnt">${c || ''}</div>
+  $("#timeline").innerHTML = months
+    .map((mo, i) => {
+      const c = counts[mo] || 0;
+      const [yy, mm] = mo.split("-");
+      const lbl =
+        i % showLbl === 0
+          ? `${["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+mm]} '${yy.slice(2)}`
+          : "";
+      return `<div class="tcol" title="${c} screening${c !== 1 ? "s" : ""} · ${mo}">
+      <div class="tcol__cnt">${c || ""}</div>
       <div class="tcol__bar" data-empty="${c ? 0 : 1}" style="height:${c ? Math.max(8, (c / max) * 100) : 4}%;animation-delay:${i * 28}ms"></div>
       <div class="tcol__lbl">${lbl}</div></div>`;
-  }).join('');
+    })
+    .join("");
 }
 
 function renderDirectors(recs) {
   const tally = {};
-  recs.forEach((r) => { const d = (r.Director || '').trim(); if (d) tally[d] = (tally[d] || 0) + 1; });
-  const top = Object.entries(tally).filter((t) => t[1] > 1).sort((a, b) => b[1] - a[1]).slice(0, 6);
-  if (!top.length) { Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, 6).forEach((t) => top.push(t)); }
-  $('#directorList').innerHTML = top.map(([d, n], i) => `
-    <li class="dir-item" data-dir="${esc(d)}">
-      <span class="dir-rank">${String(i + 1).padStart(2, '0')}</span>
-      <span class="dir-name">${esc(d)}</span>
-      <span class="dir-meta"><span class="dir-dots">${'<i></i>'.repeat(Math.min(n, 5))}</span><span class="dir-count">${n}</span></span>
-    </li>`).join('');
-  $$('#directorList .dir-item').forEach((el) => el.onclick = () => {
-    state.filters.search = el.dataset.dir; setView('library'); syncFilterUI();
+  recs.forEach((r) => {
+    const d = (r.Director || "").trim();
+    if (d) tally[d] = (tally[d] || 0) + 1;
   });
+  const top = Object.entries(tally)
+    .filter((t) => t[1] > 1)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6);
+  if (!top.length) {
+    Object.entries(tally)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .forEach((t) => top.push(t));
+  }
+  $("#directorList").innerHTML = top
+    .map(
+      ([d, n], i) => `
+    <li class="dir-item" data-dir="${esc(d)}">
+      <span class="dir-rank">${String(i + 1).padStart(2, "0")}</span>
+      <span class="dir-name">${esc(d)}</span>
+      <span class="dir-meta"><span class="dir-dots">${"<i></i>".repeat(Math.min(n, 5))}</span><span class="dir-count">${n}</span></span>
+    </li>`,
+    )
+    .join("");
+  $$("#directorList .dir-item").forEach(
+    (el) =>
+      (el.onclick = () => {
+        state.filters.search = el.dataset.dir;
+        setView("library");
+        syncFilterUI();
+      }),
+  );
 }
 
 function renderRecent(recs) {
-  let list = recs.filter((r) => lastWatch(r)).sort((a, b) => lastWatch(b).localeCompare(lastWatch(a)));
+  let list = recs
+    .filter((r) => lastWatch(r))
+    .sort((a, b) => lastWatch(b).localeCompare(lastWatch(a)));
   if (list.length < 6) list = recs.slice().sort((a, b) => b._idx - a._idx);
   list = list.slice(0, 12);
-  $('#recentStrip').innerHTML = list.map((r) => `
+  $("#recentStrip").innerHTML = list
+    .map(
+      (r) => `
     <div class="recent-card" data-idx="${r._idx}">
       <div class="mini-poster" data-title="${esc(r.Title)}" data-year="${yearOf(r)}" style="--tint:${tintOf(r)}">
         ${miniFaceHTML(r)}
       </div>
       <div class="rc-title">${esc(r.Title)}</div>
-      <div class="rc-date">${lastWatch(r) ? relDate(lastWatch(r)) : 'added'}</div>
-    </div>`).join('');
-  $$('#recentStrip .recent-card').forEach((el) => el.onclick = () => openDrawer(state.records.find((r) => r._idx === +el.dataset.idx)));
-  observePosters($('#recentStrip'));
+      <div class="rc-date">${lastWatch(r) ? relDate(lastWatch(r)) : "added"}</div>
+    </div>`,
+    )
+    .join("");
+  $$("#recentStrip .recent-card").forEach(
+    (el) =>
+      (el.onclick = () =>
+        openDrawer(state.records.find((r) => r._idx === +el.dataset.idx))),
+  );
+  observePosters($("#recentStrip"));
 }
 
 function miniFaceHTML(r) {
@@ -314,85 +474,116 @@ function renderLibrary() {
 
   // result meta
   const rated = rows.filter((r) => r.Rating);
-  const avg = rated.length ? (rated.reduce((s, r) => s + r.Rating, 0) / rated.length).toFixed(1) : null;
-  $('#resultMeta').innerHTML = `<b>${rows.length}</b> of ${state.records.length} titles` +
-    (avg ? ` &nbsp;·&nbsp; avg <b>${avg}</b>/5 across ${rated.length} rated` : '');
+  const avg = rated.length
+    ? (rated.reduce((s, r) => s + r.Rating, 0) / rated.length).toFixed(1)
+    : null;
+  $("#resultMeta").innerHTML =
+    `<b>${rows.length}</b> of ${state.records.length} titles` +
+    (avg
+      ? ` &nbsp;·&nbsp; avg <b>${avg}</b>/5 across ${rated.length} rated`
+      : "");
 
   const empty = rows.length === 0;
-  $('#emptyState').hidden = !empty;
-  $('#wall').hidden = empty || state.mode !== 'wall';
-  $('#ledgerWrap').hidden = empty || state.mode !== 'list';
+  $("#emptyState").hidden = !empty;
+  $("#wall").hidden = empty || state.mode !== "wall";
+  $("#ledgerWrap").hidden = empty || state.mode !== "list";
 
   if (empty) return;
-  if (state.mode === 'wall') renderWall(rows);
+  if (state.mode === "wall") renderWall(rows);
   else renderLedger(rows);
 }
 
 function renderWall(rows) {
-  const wall = $('#wall');
-  wall.innerHTML = rows.map((r, i) => posterHTML(r, i)).join('');
-  $$('.poster', wall).forEach((el) => el.onclick = () => openDrawer(state.records.find((r) => r._idx === +el.dataset.idx)));
+  const wall = $("#wall");
+  wall.innerHTML = rows.map((r, i) => posterHTML(r, i)).join("");
+  $$(".poster", wall).forEach(
+    (el) =>
+      (el.onclick = () =>
+        openDrawer(state.records.find((r) => r._idx === +el.dataset.idx))),
+  );
   observePosters(wall);
 }
 
 function posterHTML(r, i) {
-  const y = yearOf(r), rt = fmtRuntime(r), dir = r.Director || '';
+  const y = yearOf(r),
+    rt = fmtRuntime(r),
+    dir = r.Director || "";
   const st = r.Status;
-  const badge = st === 'watched'
-    ? `<span class="p-badge" data-s="watched">${icon('check')}seen</span>`
-    : st === 'want_to_watch'
-      ? `<span class="p-badge" data-s="want_to_watch">${icon('eye')}queued</span>`
-      : `<span class="p-badge" data-s="watched_no_date">archive</span>`;
+  const badge =
+    st === "watched"
+      ? `<span class="p-badge" data-s="watched">${icon("check")}seen</span>`
+      : st === "want_to_watch"
+        ? `<span class="p-badge" data-s="want_to_watch">${icon("eye")}queued</span>`
+        : `<span class="p-badge" data-s="watched_no_date">archive</span>`;
   const rewatch = isRewatch(r)
-    ? `<span class="p-rewatch p-badge" data-s="watched" title="re-watch">${icon('repeat')}</span>` : '';
+    ? `<span class="p-rewatch p-badge" data-s="watched" title="re-watch">${icon("repeat")}</span>`
+    : "";
   return `
   <article class="poster" data-idx="${r._idx}" data-title="${esc(r.Title)}" data-year="${y}"
            style="--tint:${tintOf(r)};animation-delay:${Math.min(i * 35, 600)}ms">
     <img class="poster__img" alt="" loading="lazy" />
     ${rewatch}
     <div class="poster__face">
-      <div class="poster__top"><span class="p-cat">NO.&nbsp;${String(r._idx + 1).padStart(3, '0')}</span>${badge}</div>
+      <div class="poster__top"><span class="p-cat">NO.&nbsp;${String(r._idx + 1).padStart(3, "0")}</span>${badge}</div>
       <div class="poster__body">
         <h3 class="p-title">${esc(r.Title)}</h3>
-        <div class="p-meta">${y ? `<span>${y}</span>` : ''}${y && rt ? '<span class="sep">·</span>' : ''}${rt ? `<span>${rt}</span>` : ''}</div>
-        ${dir ? `<div class="p-dir">${esc(dir)}</div>` : ''}
-        ${r.Rating ? `<div class="p-stars">${starsHTML(r.Rating)}</div>` : ''}
+        <div class="p-meta">${y ? `<span>${y}</span>` : ""}${y && rt ? '<span class="sep">·</span>' : ""}${rt ? `<span>${rt}</span>` : ""}</div>
+        ${dir ? `<div class="p-dir">${esc(dir)}</div>` : ""}
+        ${r.Rating ? `<div class="p-stars">${starsHTML(r.Rating)}</div>` : ""}
       </div>
     </div>
   </article>`;
 }
 
 function renderLedger(rows) {
-  $('#ledgerBody').innerHTML = rows.map((r) => {
-    const y = yearOf(r), lw = lastWatch(r);
-    const rew = isRewatch(r) ? `<span class="repeat" title="re-watch">${icon('repeat')}</span>` : '';
-    return `<tr data-idx="${r._idx}">
-      <td class="col-no"><span class="led-no">${String(r._idx + 1).padStart(3, '0')}</span></td>
+  $("#ledgerBody").innerHTML = rows
+    .map((r) => {
+      const y = yearOf(r),
+        lw = lastWatch(r);
+      const rew = isRewatch(r)
+        ? `<span class="repeat" title="re-watch">${icon("repeat")}</span>`
+        : "";
+      return `<tr data-idx="${r._idx}">
+      <td class="col-no"><span class="led-no">${String(r._idx + 1).padStart(3, "0")}</span></td>
       <td><span class="led-title">${esc(r.Title)}</span>${rew}</td>
-      <td><span class="led-year">${y || '—'}</span></td>
+      <td><span class="led-year">${y || "—"}</span></td>
       <td><span class="led-stars">${r.Rating ? starsHTML(r.Rating) : '<span style="color:var(--paper-faint);font-family:var(--mono);font-size:12px">—</span>'}</span></td>
-      <td><span class="led-runtime">${fmtRuntime(r) || '—'}</span></td>
-      <td class="col-genre"><span class="led-genre">${esc(genresOf(r).slice(0, 2).join(', ') || '—')}</span></td>
-      <td class="col-director"><span class="led-director">${esc(r.Director || '—')}</span></td>
+      <td><span class="led-runtime">${fmtRuntime(r) || "—"}</span></td>
+      <td class="col-genre"><span class="led-genre">${esc(genresOf(r).slice(0, 2).join(", ") || "—")}</span></td>
+      <td class="col-director"><span class="led-director">${esc(r.Director || "—")}</span></td>
       <td><span class="led-status" data-s="${r.Status}"><i></i>${STATUS[r.Status]?.label || r.Status}</span></td>
-      <td><span class="led-watch">${lw || '—'}</span></td>
+      <td><span class="led-watch">${lw || "—"}</span></td>
     </tr>`;
-  }).join('');
-  $$('#ledgerBody tr').forEach((tr) => tr.onclick = () => openDrawer(state.records.find((r) => r._idx === +tr.dataset.idx)));
+    })
+    .join("");
+  $$("#ledgerBody tr").forEach(
+    (tr) =>
+      (tr.onclick = () =>
+        openDrawer(state.records.find((r) => r._idx === +tr.dataset.idx))),
+  );
 }
 
 /* ── poster lazy loading (progressive enhancement; no-ops gracefully) ──── */
 let posterObserver;
 function observePosters(root) {
   if (!posterObserver) {
-    posterObserver = new IntersectionObserver((entries) => {
-      entries.forEach((e) => { if (e.isIntersecting) { loadPoster(e.target); posterObserver.unobserve(e.target); } });
-    }, { rootMargin: '300px' });
+    posterObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            loadPoster(e.target);
+            posterObserver.unobserve(e.target);
+          }
+        });
+      },
+      { rootMargin: "300px" },
+    );
   }
-  $$('[data-title]', root).forEach((el) => posterObserver.observe(el));
+  $$("[data-title]", root).forEach((el) => posterObserver.observe(el));
 }
 async function loadPoster(el) {
-  const title = el.dataset.title, year = el.dataset.year || '';
+  const title = el.dataset.title,
+    year = el.dataset.year || "";
   if (!title) return;
   const key = `${title}|${year}`.toLowerCase();
   let url = posterMemo.get(key);
@@ -400,29 +591,55 @@ async function loadPoster(el) {
     posterTried.add(key);
     try {
       if (LOCAL_SERVER) {
-        url = (await api(`/api/poster?title=${encodeURIComponent(title)}&year=${encodeURIComponent(year)}`)).url || null;
+        url =
+          (
+            await api(
+              `/api/poster?title=${encodeURIComponent(title)}&year=${encodeURIComponent(year)}`,
+            )
+          ).url || null;
         if (!url) url = await fetchITunesPoster(title, year);
       } else {
         url = await fetchITunesPoster(title, year);
       }
       posterMemo.set(key, url);
-    } catch (_) { url = null; }
+    } catch (_) {
+      url = null;
+    }
   }
   if (!url) return;
-  const img = $('.poster__img', el) || $('img', el);
-  if (img) { img.src = url; img.onload = () => el.classList.add('has-img'); }
+  const img = $(".poster__img", el) || $("img", el);
+  if (img) {
+    img.src = url;
+    img.onload = () => el.classList.add("has-img");
+  }
 }
 
 /* JSONP fallback for iTunes — bypasses extension fetch interception (Firefox) */
 function itunesJsonp(url) {
   return new Promise((resolve, reject) => {
-    const id = '_itcb' + (Date.now() & 0xffff);
-    const script = document.createElement('script');
+    const id = "_itcb" + (Date.now() & 0xffff);
+    const script = document.createElement("script");
     let done = false;
-    function cleanup() { if (done) return; done = true; script.remove(); delete window[id]; }
-    const timer = setTimeout(() => { cleanup(); reject(new Error('timeout')); }, 8000);
-    window[id] = (data) => { clearTimeout(timer); cleanup(); resolve(data); };
-    script.onerror = () => { clearTimeout(timer); cleanup(); reject(new Error('load error')); };
+    function cleanup() {
+      if (done) return;
+      done = true;
+      script.remove();
+      delete window[id];
+    }
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("timeout"));
+    }, 8000);
+    window[id] = (data) => {
+      clearTimeout(timer);
+      cleanup();
+      resolve(data);
+    };
+    script.onerror = () => {
+      clearTimeout(timer);
+      cleanup();
+      reject(new Error("load error"));
+    };
     script.src = `${url}&callback=${id}`;
     document.head.appendChild(script);
   });
@@ -430,9 +647,12 @@ function itunesJsonp(url) {
 
 /* ── OMDb (Open Movie Database) ───────────────────────────────────────── */
 // Free API key at https://www.omdbapi.com/apikey.aspx — stored in localStorage.
-const OMDB_STORE = 'proj_room_omdb';
-const getOmdbKey  = () => localStorage.getItem(OMDB_STORE) || '';
-const saveOmdbKey = (k) => k ? localStorage.setItem(OMDB_STORE, k.trim()) : localStorage.removeItem(OMDB_STORE);
+const OMDB_STORE = "proj_room_omdb";
+const getOmdbKey = () => localStorage.getItem(OMDB_STORE) || "";
+const saveOmdbKey = (k) =>
+  k
+    ? localStorage.setItem(OMDB_STORE, k.trim())
+    : localStorage.removeItem(OMDB_STORE);
 
 async function omdbFetch(params) {
   const key = getOmdbKey();
@@ -441,41 +661,63 @@ async function omdbFetch(params) {
     const res = await fetch(`https://www.omdbapi.com/?${params}&apikey=${key}`);
     if (!res.ok) return null;
     const d = await res.json();
-    return d.Response === 'True' ? d : null;
-  } catch (_) { return null; }
+    return d.Response === "True" ? d : null;
+  } catch (_) {
+    return null;
+  }
 }
 function parseOmdbRuntime(str) {
-  const m = /(\d+)\s*min/i.exec(str || '');
-  if (!m) return '';
-  const mins = +m[1], h = Math.floor(mins / 60), mm = mins % 60;
-  return `${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00`;
+  const m = /(\d+)\s*min/i.exec(str || "");
+  if (!m) return "";
+  const mins = +m[1],
+    h = Math.floor(mins / 60),
+    mm = mins % 60;
+  return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00`;
 }
 function parseOmdbDate(str) {
-  if (!str || str === 'N/A') return '';
-  const d = new Date(str); return isNaN(d) ? '' : d.toISOString().slice(0, 10);
+  if (!str || str === "N/A") return "";
+  const d = new Date(str);
+  return isNaN(d) ? "" : d.toISOString().slice(0, 10);
 }
 
 /* Poster fetch: OMDb exact lookup → iTunes fallback (entity=movie is broken;
    filter by kind client-side instead). */
 async function fetchITunesPoster(title, year) {
-  let omdb = await omdbFetch(`t=${encodeURIComponent(title)}&y=${year || ''}&type=movie`);
+  let omdb = await omdbFetch(
+    `t=${encodeURIComponent(title)}&y=${year || ""}&type=movie`,
+  );
   // Year in the local DB may differ from OMDb's canonical release year — retry without year.
-  if (!omdb?.Poster || omdb.Poster === 'N/A') omdb = await omdbFetch(`t=${encodeURIComponent(title)}&type=movie`);
-  if (omdb?.Poster && omdb.Poster !== 'N/A') return omdb.Poster;
+  if (!omdb?.Poster || omdb.Poster === "N/A")
+    omdb = await omdbFetch(`t=${encodeURIComponent(title)}&type=movie`);
+  if (omdb?.Poster && omdb.Poster !== "N/A") return omdb.Poster;
 
   const term = year ? `${title} ${year}` : title;
   const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&limit=15`;
   let data;
-  try { const res = await fetch(url); if (res.ok) data = await res.json(); } catch (_) {}
-  if (!data?.results?.length) { try { data = await itunesJsonp(url); } catch (_) { return null; } }
-  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  try {
+    const res = await fetch(url);
+    if (res.ok) data = await res.json();
+  } catch (_) {}
+  if (!data?.results?.length) {
+    try {
+      data = await itunesJsonp(url);
+    } catch (_) {
+      return null;
+    }
+  }
+  const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
   const titleNorm = norm(title);
   // Only accept results whose title actually contains the search title (prevents wrong-movie posters).
-  const movies = (data?.results || []).filter(r =>
-    r.kind === 'feature-movie' && r.artworkUrl100 && norm(r.trackName || '').includes(titleNorm));
+  const movies = (data?.results || []).filter(
+    (r) =>
+      r.kind === "feature-movie" &&
+      r.artworkUrl100 &&
+      norm(r.trackName || "").includes(titleNorm),
+  );
   if (!movies.length) return null;
-  const best = (year && movies.find(m => m.releaseDate?.startsWith(year))) || movies[0];
-  return best?.artworkUrl100?.replace(/\d+x\d+bb/, '600x600bb') || null;
+  const best =
+    (year && movies.find((m) => m.releaseDate?.startsWith(year))) || movies[0];
+  return best?.artworkUrl100?.replace(/\d+x\d+bb/, "600x600bb") || null;
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -487,43 +729,86 @@ function ensureFilterChips() {
   chipsBuilt = true;
   // genre chips
   const tally = {};
-  state.records.forEach((r) => genresOf(r).forEach((g) => tally[g] = (tally[g] || 0) + 1));
-  const genres = Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, 16).map((t) => t[0]);
-  $('#genreChips').innerHTML = genres.map((g) =>
-    `<button class="chip" data-genre="${esc(g.toLowerCase())}">${esc(g)}</button>`).join('');
-  $$('#genreChips .chip').forEach((c) => c.onclick = () => {
-    const g = c.dataset.genre;
-    state.filters.genres.has(g) ? state.filters.genres.delete(g) : state.filters.genres.add(g);
-    syncFilterUI(); renderLibrary();
-  });
+  state.records.forEach((r) =>
+    genresOf(r).forEach((g) => (tally[g] = (tally[g] || 0) + 1)),
+  );
+  const genres = Object.entries(tally)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 16)
+    .map((t) => t[0]);
+  $("#genreChips").innerHTML = genres
+    .map(
+      (g) =>
+        `<button class="chip" data-genre="${esc(g.toLowerCase())}">${esc(g)}</button>`,
+    )
+    .join("");
+  $$("#genreChips .chip").forEach(
+    (c) =>
+      (c.onclick = () => {
+        const g = c.dataset.genre;
+        state.filters.genres.has(g)
+          ? state.filters.genres.delete(g)
+          : state.filters.genres.add(g);
+        syncFilterUI();
+        renderLibrary();
+      }),
+  );
   // rating filter
-  let rf = '';
-  for (let i = 1; i <= 5; i++) rf += `<button class="rfstar" data-n="${i}">${icon('star-fill')}</button>`;
-  $('#ratingFilter').innerHTML = rf;
-  $$('#ratingFilter .rfstar').forEach((s) => s.onclick = () => {
-    const n = +s.dataset.n;
-    state.filters.minRating = state.filters.minRating === n ? 0 : n;
-    syncFilterUI(); renderLibrary();
-  });
+  let rf = "";
+  for (let i = 1; i <= 5; i++)
+    rf += `<button class="rfstar" data-n="${i}">${icon("star-fill")}</button>`;
+  $("#ratingFilter").innerHTML = rf;
+  $$("#ratingFilter .rfstar").forEach(
+    (s) =>
+      (s.onclick = () => {
+        const n = +s.dataset.n;
+        state.filters.minRating = state.filters.minRating === n ? 0 : n;
+        syncFilterUI();
+        renderLibrary();
+      }),
+  );
   // decades
-  const decs = [...new Set(state.records.map((r) => { const y = +yearOf(r); return y ? Math.floor(y / 10) * 10 : null; }).filter(Boolean))].sort((a, b) => b - a);
-  $('#decadeChips').innerHTML = decs.map((d) => `<button class="chip" data-dec="${d}">${d}s</button>`).join('');
-  $$('#decadeChips .chip').forEach((c) => c.onclick = () => {
-    const d = +c.dataset.dec;
-    state.filters.decade = state.filters.decade === d ? null : d;
-    syncFilterUI(); renderLibrary();
-  });
+  const decs = [
+    ...new Set(
+      state.records
+        .map((r) => {
+          const y = +yearOf(r);
+          return y ? Math.floor(y / 10) * 10 : null;
+        })
+        .filter(Boolean),
+    ),
+  ].sort((a, b) => b - a);
+  $("#decadeChips").innerHTML = decs
+    .map((d) => `<button class="chip" data-dec="${d}">${d}s</button>`)
+    .join("");
+  $$("#decadeChips .chip").forEach(
+    (c) =>
+      (c.onclick = () => {
+        const d = +c.dataset.dec;
+        state.filters.decade = state.filters.decade === d ? null : d;
+        syncFilterUI();
+        renderLibrary();
+      }),
+  );
 }
 function syncFilterUI() {
   const f = state.filters;
-  $('#searchInput').value = f.search;
-  $('#searchClear').hidden = !f.search;
-  $$('#statusSeg .seg__btn').forEach((b) => b.classList.toggle('is-active', b.dataset.status === f.status));
-  $$('#genreChips .chip').forEach((c) => c.classList.toggle('is-active', f.genres.has(c.dataset.genre)));
-  $$('#decadeChips .chip').forEach((c) => c.classList.toggle('is-active', f.decade === +c.dataset.dec));
-  $$('#ratingFilter .rfstar').forEach((s) => s.classList.toggle('is-on', +s.dataset.n <= f.minRating));
+  $("#searchInput").value = f.search;
+  $("#searchClear").hidden = !f.search;
+  $$("#statusSeg .seg__btn").forEach((b) =>
+    b.classList.toggle("is-active", b.dataset.status === f.status),
+  );
+  $$("#genreChips .chip").forEach((c) =>
+    c.classList.toggle("is-active", f.genres.has(c.dataset.genre)),
+  );
+  $$("#decadeChips .chip").forEach((c) =>
+    c.classList.toggle("is-active", f.decade === +c.dataset.dec),
+  );
+  $$("#ratingFilter .rfstar").forEach((s) =>
+    s.classList.toggle("is-on", +s.dataset.n <= f.minRating),
+  );
   const active = f.genres.size || f.minRating || f.decade != null;
-  if (active && $('#filterbar').hidden) $('#filterbar').hidden = false;
+  if (active && $("#filterbar").hidden) $("#filterbar").hidden = false;
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -531,91 +816,125 @@ function syncFilterUI() {
    ════════════════════════════════════════════════════════════════════════ */
 function openDrawer(r) {
   if (!r) return;
-  const y = yearOf(r), key = `${r.Title}|${y}`.toLowerCase();
+  const y = yearOf(r),
+    key = `${r.Title}|${y}`.toLowerCase();
   const poster = posterMemo.get(key);
   const tags = [y, fmtRuntime(r), genresOf(r)[0]].filter(Boolean);
   const facts = [];
-  const fact = (k, v, wide) => { if (v) facts.push(`<div class="dr-fact${wide ? ' dr-fact--wide' : ''}"><dt>${k}</dt><dd>${esc(v)}</dd></div>`); };
-  fact('Released', r.ReleaseDate ? prettyDate(r.ReleaseDate) : '');
-  fact('Runtime', fmtRuntime(r));
-  fact('Director', r.Director, true);
-  fact('Studio', r.Studio, true);
-  fact('Genre', genresOf(r).join(' · '), true);
-  fact('Cast', r.Actors, true);
-  const priorTxt = r.PriorWatch === true ? 'Seen before (re-watch)' : r.PriorWatch === false ? 'First-time viewing' : '';
-  fact('Viewing', priorTxt);
+  const fact = (k, v, wide) => {
+    if (v)
+      facts.push(
+        `<div class="dr-fact${wide ? " dr-fact--wide" : ""}"><dt>${k}</dt><dd>${esc(v)}</dd></div>`,
+      );
+  };
+  fact("Released", r.ReleaseDate ? prettyDate(r.ReleaseDate) : "");
+  fact("Runtime", fmtRuntime(r));
+  fact("Director", r.Director, true);
+  fact("Studio", r.Studio, true);
+  fact("Genre", genresOf(r).join(" · "), true);
+  fact("Cast", r.Actors, true);
+  const priorTxt =
+    r.PriorWatch === true
+      ? "Seen before (re-watch)"
+      : r.PriorWatch === false
+        ? "First-time viewing"
+        : "";
+  fact("Viewing", priorTxt);
 
   const dates = watchDates(r).slice().sort();
   const stubs = dates.length
-    ? `<div class="dr-section"><h3>Screening history — ${dates.length} ${dates.length === 1 ? 'viewing' : 'viewings'}</h3>
-        <div class="stubs">${dates.slice().reverse().map((d) => `
-          <div class="stub">${icon('ticket')}<span class="stub__date">${prettyDate(d)}</span><span class="stub__rel">${relDate(d)}</span></div>`).join('')}</div></div>`
-    : '';
+    ? `<div class="dr-section"><h3>Screening history — ${dates.length} ${dates.length === 1 ? "viewing" : "viewings"}</h3>
+        <div class="stubs">${dates
+          .slice()
+          .reverse()
+          .map(
+            (d) => `
+          <div class="stub">${icon("ticket")}<span class="stub__date">${prettyDate(d)}</span><span class="stub__rel">${relDate(d)}</span></div>`,
+          )
+          .join("")}</div></div>`
+    : "";
 
   const canWatchToday = !dates.includes(new Date().toISOString().slice(0, 10));
 
-  $('#drawerInner').innerHTML = `
+  $("#drawerInner").innerHTML = `
     <div class="dr-hero" style="--tint:${tintOf(r)}">
-      <button class="icon-btn dr-close" id="drClose">${icon('x')}</button>
+      <button class="icon-btn dr-close" id="drClose">${icon("x")}</button>
       <div class="dr-head">
         <div class="dr-poster">${poster ? `<img src="${esc(poster)}" alt="">` : miniFaceHTML(r)}</div>
         <div>
-          <div class="dr-cat">No. ${String(r._idx + 1).padStart(3, '0')} · ${STATUS[r.Status]?.label || r.Status}</div>
+          <div class="dr-cat">No. ${String(r._idx + 1).padStart(3, "0")} · ${STATUS[r.Status]?.label || r.Status}</div>
           <h2 class="dr-title">${esc(r.Title)}</h2>
-          <div class="dr-tagline">${tags.map((t) => `<span>${esc(t)}</span>`).join('')}</div>
+          <div class="dr-tagline">${tags.map((t) => `<span>${esc(t)}</span>`).join("")}</div>
           <div class="dr-stars" id="drStars">${starsHTML(r.Rating, { interactive: true })}<span class="dr-rate-hint">click to rate</span></div>
         </div>
       </div>
     </div>
     <div class="dr-body">
       <div class="dr-actions">
-        <button class="btn btn--amber" id="drEdit">${icon('pencil')}<span>Edit</span></button>
-        ${canWatchToday ? `<button class="btn btn--ghost" id="drWatch">${icon('check')}<span>Log a watch today</span></button>` : ''}
-        <button class="btn btn--ghost" id="drDelete">${icon('trash')}<span>Delete</span></button>
+        <button class="btn btn--amber" id="drEdit">${icon("pencil")}<span>Edit</span></button>
+        ${canWatchToday ? `<button class="btn btn--ghost" id="drWatch">${icon("check")}<span>Log a watch today</span></button>` : ""}
+        <button class="btn btn--ghost" id="drDelete">${icon("trash")}<span>Delete</span></button>
       </div>
       <div class="dr-section"><h3>Notes</h3>
-        <p class="dr-notes ${r.Notes ? '' : 'is-empty'}">${r.Notes ? esc(r.Notes) : 'No notes recorded for this title.'}</p></div>
+        <p class="dr-notes ${r.Notes ? "" : "is-empty"}">${r.Notes ? esc(r.Notes) : "No notes recorded for this title."}</p></div>
       ${stubs}
-      <div class="dr-section"><h3>Particulars</h3><div class="dr-facts">${facts.join('') || '<div class="dr-fact dr-fact--wide"><dd style="color:var(--paper-faint)">No metadata recorded.</dd></div>'}</div></div>
+      <div class="dr-section"><h3>Particulars</h3><div class="dr-facts">${facts.join("") || '<div class="dr-fact dr-fact--wide"><dd style="color:var(--paper-faint)">No metadata recorded.</dd></div>'}</div></div>
     </div>`;
 
   // wire
-  $('#drClose').onclick = closeDrawer;
-  $('#drEdit').onclick = () => { closeDrawer(); openModal(r); };
-  $('#drDelete').onclick = () => deleteMovie(r);
-  if ($('#drWatch')) $('#drWatch').onclick = () => markWatched(r);
-  wireStarRating($('#drStars'), r.Rating, (n) => quickRate(r, n));
+  $("#drClose").onclick = closeDrawer;
+  $("#drEdit").onclick = () => {
+    closeDrawer();
+    openModal(r);
+  };
+  $("#drDelete").onclick = () => deleteMovie(r);
+  if ($("#drWatch")) $("#drWatch").onclick = () => markWatched(r);
+  wireStarRating($("#drStars"), r.Rating, (n) => quickRate(r, n));
 
-  $('#scrim').hidden = false;
-  requestAnimationFrame(() => { $('#scrim').classList.add('is-open'); $('#drawer').classList.add('is-open'); });
-  $('#drawer').setAttribute('aria-hidden', 'false');
+  $("#scrim").hidden = false;
+  requestAnimationFrame(() => {
+    $("#scrim").classList.add("is-open");
+    $("#drawer").classList.add("is-open");
+  });
+  $("#drawer").setAttribute("aria-hidden", "false");
   // load poster into drawer if not yet known
   if (poster === undefined) loadDrawerPoster(r);
 }
 async function loadDrawerPoster(r) {
-  const y = yearOf(r), key = `${r.Title}|${y}`.toLowerCase();
+  const y = yearOf(r),
+    key = `${r.Title}|${y}`.toLowerCase();
   try {
     let url = LOCAL_SERVER
-      ? (await api(`/api/poster?title=${encodeURIComponent(r.Title)}&year=${encodeURIComponent(y)}`)).url || null
+      ? (
+          await api(
+            `/api/poster?title=${encodeURIComponent(r.Title)}&year=${encodeURIComponent(y)}`,
+          )
+        ).url || null
       : null;
     if (!url) url = await fetchITunesPoster(r.Title, y);
     posterMemo.set(key, url);
-    if (url) { const p = $('.dr-poster'); if (p) p.innerHTML = `<img src="${esc(url)}" alt="">`; }
+    if (url) {
+      const p = $(".dr-poster");
+      if (p) p.innerHTML = `<img src="${esc(url)}" alt="">`;
+    }
   } catch (_) {}
 }
 function closeDrawer() {
-  $('#drawer').classList.remove('is-open');
-  $('#scrim').classList.remove('is-open');
-  $('#drawer').setAttribute('aria-hidden', 'true');
-  setTimeout(() => { if (!$('#modal').classList.contains('is-open')) $('#scrim').hidden = true; }, 420);
+  $("#drawer").classList.remove("is-open");
+  $("#scrim").classList.remove("is-open");
+  $("#drawer").setAttribute("aria-hidden", "true");
+  setTimeout(() => {
+    if (!$("#modal").classList.contains("is-open")) $("#scrim").hidden = true;
+  }, 420);
 }
 
 function wireStarRating(container, current, onPick) {
-  const stars = $$('svg[data-n]', container);
-  const paint = (val) => stars.forEach((s) => {
-    const on = +s.dataset.n <= val;
-    s.classList.toggle('empty', !on);
-  });
+  const stars = $$("svg[data-n]", container);
+  const paint = (val) =>
+    stars.forEach((s) => {
+      const on = +s.dataset.n <= val;
+      s.classList.toggle("empty", !on);
+    });
   stars.forEach((s) => {
     s.onmouseenter = () => paint(+s.dataset.n);
     s.onclick = () => onPick(+s.dataset.n);
@@ -633,41 +952,79 @@ async function reloadAndRender() {
 }
 
 async function quickRate(r, n) {
-  if (!LOCAL_SERVER) { toast('Rating is read-only in the published archive', 'info'); return; }
+  if (!LOCAL_SERVER) {
+    toast("Rating is read-only in the published archive", "info");
+    return;
+  }
   try {
     const next = { ...r, Rating: r.Rating === n ? null : n };
-    state.db = await api(`/api/movies/${r._idx}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) });
+    state.db = await api(`/api/movies/${r._idx}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next),
+    });
     await reloadAndRender();
     const updated = state.records.find((x) => x._idx === r._idx);
     if (updated) openDrawer(updated);
-    toast(next.Rating ? `Rated ${'★'.repeat(next.Rating)} — ${r.Title}` : `Cleared rating — ${r.Title}`, 'ok');
-  } catch (e) { toast(e.message, 'err'); }
+    toast(
+      next.Rating
+        ? `Rated ${"★".repeat(next.Rating)} — ${r.Title}`
+        : `Cleared rating — ${r.Title}`,
+      "ok",
+    );
+  } catch (e) {
+    toast(e.message, "err");
+  }
 }
 
 async function markWatched(r) {
-  if (!LOCAL_SERVER) { toast('Logging is read-only in the published archive', 'info'); return; }
+  if (!LOCAL_SERVER) {
+    toast("Logging is read-only in the published archive", "info");
+    return;
+  }
   try {
     const today = new Date().toISOString().slice(0, 10);
     const dates = [...new Set([...watchDates(r), today])].sort();
-    const prior = r.PriorWatch == null ? (r.Status === 'want_to_watch' ? false : r.PriorWatch) : r.PriorWatch;
-    const next = { ...r, WatchDate: dates, Status: 'watched', PriorWatch: prior };
-    await api(`/api/movies/${r._idx}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) });
+    const prior =
+      r.PriorWatch == null
+        ? r.Status === "want_to_watch"
+          ? false
+          : r.PriorWatch
+        : r.PriorWatch;
+    const next = {
+      ...r,
+      WatchDate: dates,
+      Status: "watched",
+      PriorWatch: prior,
+    };
+    await api(`/api/movies/${r._idx}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next),
+    });
     await reloadAndRender();
     const updated = state.records.find((x) => x._idx === r._idx);
     if (updated) openDrawer(updated);
-    toast(`Logged a screening — ${r.Title}`, 'ok');
-  } catch (e) { toast(e.message, 'err'); }
+    toast(`Logged a screening — ${r.Title}`, "ok");
+  } catch (e) {
+    toast(e.message, "err");
+  }
 }
 
 async function deleteMovie(r) {
-  if (!LOCAL_SERVER) { toast('Deletion is read-only in the published archive', 'info'); return; }
+  if (!LOCAL_SERVER) {
+    toast("Deletion is read-only in the published archive", "info");
+    return;
+  }
   if (!confirm(`Permanently remove "${r.Title}" from the archive?`)) return;
   try {
-    await api(`/api/movies/${r._idx}`, { method: 'DELETE' });
+    await api(`/api/movies/${r._idx}`, { method: "DELETE" });
     closeDrawer();
     await reloadAndRender();
-    toast(`Removed — ${r.Title}`, 'info');
-  } catch (e) { toast(e.message, 'err'); }
+    toast(`Removed — ${r.Title}`, "info");
+  } catch (e) {
+    toast(e.message, "err");
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -675,28 +1032,32 @@ async function deleteMovie(r) {
    ════════════════════════════════════════════════════════════════════════ */
 let modalState = null;
 function openModal(rec = null) {
-  if (!LOCAL_SERVER) { toast('The published archive is read-only', 'info'); return; }
+  if (!LOCAL_SERVER) {
+    toast("The published archive is read-only", "info");
+    return;
+  }
   const isNew = !rec;
   modalState = {
-    isNew, idx: rec ? rec._idx : null,
+    isNew,
+    idx: rec ? rec._idx : null,
     rating: rec?.Rating || null,
-    status: rec?.Status || 'watched',
+    status: rec?.Status || "watched",
     dates: rec ? watchDates(rec).slice().sort() : [],
     prior: rec?.PriorWatch ?? null,
   };
-  const g = (k) => esc(rec?.[k] || '');
-  $('#modalPanel').innerHTML = `
+  const g = (k) => esc(rec?.[k] || "");
+  $("#modalPanel").innerHTML = `
     <div class="modal__head">
-      <div><p class="kicker"><span class="dot"></span> ${isNew ? 'new acquisition' : 'revise the record'}</p>
-      <h2>${isNew ? 'Add a Title' : esc(rec.Title)}</h2></div>
-      <button class="icon-btn" id="mClose">${icon('x')}</button>
+      <div><p class="kicker"><span class="dot"></span> ${isNew ? "new acquisition" : "revise the record"}</p>
+      <h2>${isNew ? "Add a Title" : esc(rec.Title)}</h2></div>
+      <button class="icon-btn" id="mClose">${icon("x")}</button>
     </div>
     <div class="modal__body">
       <div class="field">
         <label>Title</label>
         <div class="title-field">
-          <input class="input" id="fTitle" value="${g('Title')}" placeholder="Film title" autocomplete="off"/>
-          <button class="btn btn--ghost" id="fFetch">${icon('sparkle')}<span>Fetch</span></button>
+          <input class="input" id="fTitle" value="${g("Title")}" placeholder="Film title" autocomplete="off"/>
+          <button class="btn btn--ghost" id="fFetch">${icon("sparkle")}<span>Fetch</span></button>
         </div>
         <div id="itunesBox"></div>
       </div>
@@ -714,7 +1075,7 @@ function openModal(rec = null) {
         <div class="field">
           <label>Rating</label>
           <div class="ratepick" id="fRating">
-            ${[1,2,3,4,5].map((i) => `<button class="ratepick__star" data-n="${i}">${icon('star-fill')}</button>`).join('')}
+            ${[1, 2, 3, 4, 5].map((i) => `<button class="ratepick__star" data-n="${i}">${icon("star-fill")}</button>`).join("")}
             <button class="ratepick__clear" id="fRateClear">clear</button>
           </div>
         </div>
@@ -731,83 +1092,144 @@ function openModal(rec = null) {
       </div>
 
       <div class="field-row">
-        <div class="field"><label>Release date</label><input class="input" id="fRelease" value="${g('ReleaseDate')}" placeholder="YYYY-MM-DD"/></div>
-        <div class="field"><label>Runtime</label><input class="input" id="fRuntime" value="${g('Runtime')}" placeholder="HH:MM:SS"/></div>
+        <div class="field"><label>Release date</label><input class="input" id="fRelease" value="${g("ReleaseDate")}" placeholder="YYYY-MM-DD"/></div>
+        <div class="field"><label>Runtime</label><input class="input" id="fRuntime" value="${g("Runtime")}" placeholder="HH:MM:SS"/></div>
       </div>
       <div class="field-row">
-        <div class="field"><label>Director</label><input class="input" id="fDirector" value="${g('Director')}" placeholder="Director"/></div>
-        <div class="field"><label>Studio</label><input class="input" id="fStudio" value="${g('Studio')}" placeholder="Studio"/></div>
+        <div class="field"><label>Director</label><input class="input" id="fDirector" value="${g("Director")}" placeholder="Director"/></div>
+        <div class="field"><label>Studio</label><input class="input" id="fStudio" value="${g("Studio")}" placeholder="Studio"/></div>
       </div>
-      <div class="field"><label>Genre</label><input class="input" id="fGenre" value="${g('Genre')}" placeholder="Genre1, Genre2"/></div>
-      <div class="field"><label>Cast</label><input class="input" id="fActors" value="${g('Actors')}" placeholder="Actor 1, Actor 2"/></div>
-      <div class="field"><label>Notes</label><textarea id="fNotes" placeholder="Your verdict…">${g('Notes')}</textarea></div>
+      <div class="field"><label>Genre</label><input class="input" id="fGenre" value="${g("Genre")}" placeholder="Genre1, Genre2"/></div>
+      <div class="field"><label>Cast</label><input class="input" id="fActors" value="${g("Actors")}" placeholder="Actor 1, Actor 2"/></div>
+      <div class="field"><label>Notes</label><textarea id="fNotes" placeholder="Your verdict…">${g("Notes")}</textarea></div>
     </div>
     <div class="modal__foot">
       <span class="spacer"></span>
       <button class="btn btn--ghost" id="mCancel">Cancel</button>
-      <button class="btn btn--amber" id="mSave">${icon('check')}<span>${isNew ? 'Add to archive' : 'Save changes'}</span></button>
+      <button class="btn btn--amber" id="mSave">${icon("check")}<span>${isNew ? "Add to archive" : "Save changes"}</span></button>
     </div>`;
 
   // status
-  const paintStatus = () => { $$('#fStatus .statuspick__opt').forEach((o) => o.classList.toggle('is-active', o.dataset.v === modalState.status));
-    $('#datesWrap').style.display = modalState.status === 'want_to_watch' ? 'none' : '';
-    $('#priorWrap').style.display = modalState.status === 'want_to_watch' ? 'none' : ''; };
-  $$('#fStatus .statuspick__opt').forEach((o) => o.onclick = () => { modalState.status = o.dataset.v; paintStatus(); });
+  const paintStatus = () => {
+    $$("#fStatus .statuspick__opt").forEach((o) =>
+      o.classList.toggle("is-active", o.dataset.v === modalState.status),
+    );
+    $("#datesWrap").style.display =
+      modalState.status === "want_to_watch" ? "none" : "";
+    $("#priorWrap").style.display =
+      modalState.status === "want_to_watch" ? "none" : "";
+  };
+  $$("#fStatus .statuspick__opt").forEach(
+    (o) =>
+      (o.onclick = () => {
+        modalState.status = o.dataset.v;
+        paintStatus();
+      }),
+  );
   paintStatus();
 
   // rating
-  const rp = $('#fRating');
-  const paintRate = (v) => $$('.ratepick__star', rp).forEach((s) => s.classList.toggle('on', +s.dataset.n <= v));
-  $$('.ratepick__star', rp).forEach((s) => {
-    s.onmouseenter = () => { rp.classList.add('hot'); $$('.ratepick__star', rp).forEach((x) => x.classList.toggle('lit', +x.dataset.n <= +s.dataset.n)); };
-    s.onclick = () => { modalState.rating = +s.dataset.n; paintRate(modalState.rating); };
+  const rp = $("#fRating");
+  const paintRate = (v) =>
+    $$(".ratepick__star", rp).forEach((s) =>
+      s.classList.toggle("on", +s.dataset.n <= v),
+    );
+  $$(".ratepick__star", rp).forEach((s) => {
+    s.onmouseenter = () => {
+      rp.classList.add("hot");
+      $$(".ratepick__star", rp).forEach((x) =>
+        x.classList.toggle("lit", +x.dataset.n <= +s.dataset.n),
+      );
+    };
+    s.onclick = () => {
+      modalState.rating = +s.dataset.n;
+      paintRate(modalState.rating);
+    };
   });
-  rp.onmouseleave = () => { rp.classList.remove('hot'); $$('.ratepick__star', rp).forEach((x) => x.classList.remove('lit')); };
-  $('#fRateClear').onclick = () => { modalState.rating = null; paintRate(0); };
+  rp.onmouseleave = () => {
+    rp.classList.remove("hot");
+    $$(".ratepick__star", rp).forEach((x) => x.classList.remove("lit"));
+  };
+  $("#fRateClear").onclick = () => {
+    modalState.rating = null;
+    paintRate(0);
+  };
   paintRate(modalState.rating || 0);
 
   // prior toggle
-  $('#fPrior').checked = modalState.prior === true;
-  $('#fPrior').onchange = (e) => modalState.prior = e.target.checked;
+  $("#fPrior").checked = modalState.prior === true;
+  $("#fPrior").onchange = (e) => (modalState.prior = e.target.checked);
 
   // dates
   renderDateChips();
 
   // fetch
-  $('#fFetch').onclick = doITunes;
-  $('#fTitle').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doITunes(); } });
+  $("#fFetch").onclick = doITunes;
+  $("#fTitle").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      doITunes();
+    }
+  });
 
   // buttons
-  $('#mClose').onclick = closeModal;
-  $('#mCancel').onclick = closeModal;
-  $('#mSave').onclick = saveMovie;
+  $("#mClose").onclick = closeModal;
+  $("#mCancel").onclick = closeModal;
+  $("#mSave").onclick = saveMovie;
 
-  $('#scrim').hidden = false;
-  requestAnimationFrame(() => { $('#scrim').classList.add('is-open'); $('#modal').classList.add('is-open'); });
-  $('#modal').setAttribute('aria-hidden', 'false');
-  setTimeout(() => $('#fTitle').focus(), 80);
+  $("#scrim").hidden = false;
+  requestAnimationFrame(() => {
+    $("#scrim").classList.add("is-open");
+    $("#modal").classList.add("is-open");
+  });
+  $("#modal").setAttribute("aria-hidden", "false");
+  setTimeout(() => $("#fTitle").focus(), 80);
 }
 
 function renderDateChips() {
-  const box = $('#fDates');
-  box.innerHTML = modalState.dates.map((d, i) =>
-    `<span class="datechip">${esc(d)}<button data-i="${i}">${icon('x')}</button></span>`).join('') +
+  const box = $("#fDates");
+  box.innerHTML =
+    modalState.dates
+      .map(
+        (d, i) =>
+          `<span class="datechip">${esc(d)}<button data-i="${i}">${icon("x")}</button></span>`,
+      )
+      .join("") +
     `<span class="dateadd"><input class="input" id="fDateInput" placeholder="YYYY-MM-DD"/><button class="btn btn--ghost btn--sm" id="fDateToday">Today</button></span>`;
-  $$('#fDates .datechip button').forEach((b) => b.onclick = () => { modalState.dates.splice(+b.dataset.i, 1); renderDateChips(); });
+  $$("#fDates .datechip button").forEach(
+    (b) =>
+      (b.onclick = () => {
+        modalState.dates.splice(+b.dataset.i, 1);
+        renderDateChips();
+      }),
+  );
   const add = (v) => {
-    v = (v || '').trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) { toast('Use YYYY-MM-DD format', 'err'); return; }
+    v = (v || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      toast("Use YYYY-MM-DD format", "err");
+      return;
+    }
     if (!modalState.dates.includes(v)) modalState.dates.push(v);
-    modalState.dates.sort(); renderDateChips(); $('#fDateInput').focus();
+    modalState.dates.sort();
+    renderDateChips();
+    $("#fDateInput").focus();
   };
-  $('#fDateToday').onclick = () => add(new Date().toISOString().slice(0, 10));
-  $('#fDateInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(e.target.value); } });
+  $("#fDateToday").onclick = () => add(new Date().toISOString().slice(0, 10));
+  $("#fDateInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      add(e.target.value);
+    }
+  });
 }
 
 async function doITunes() {
-  const term = $('#fTitle').value.trim();
-  if (!term) { toast('Enter a title first', 'err'); return; }
-  const box = $('#itunesBox');
+  const term = $("#fTitle").value.trim();
+  if (!term) {
+    toast("Enter a title first", "err");
+    return;
+  }
+  const box = $("#itunesBox");
   box.innerHTML = `<div class="itunes-results" style="padding:16px;display:flex;align-items:center;gap:10px;color:var(--paper-dim)"><span class="spinner"></span> Searching the catalogue…</div>`;
   try {
     let results;
@@ -817,13 +1239,19 @@ async function doITunes() {
     }
     // Step 2: OMDb (primary for GitHub Pages; fallback for local server when iTunes is empty)
     if (!results?.length && getOmdbKey()) {
-      const omdbSearch = await omdbFetch(`s=${encodeURIComponent(term)}&type=movie`);
+      const omdbSearch = await omdbFetch(
+        `s=${encodeURIComponent(term)}&type=movie`,
+      );
       if (omdbSearch?.Search?.length) {
-        results = omdbSearch.Search.map(m => ({
-          title: String(m.Title || ''),
-          year: String(m.Year || ''),
-          releaseDate: '', runtime: '', genre: '', director: '', notes: '',
-          poster: m.Poster && m.Poster !== 'N/A' ? m.Poster : null,
+        results = omdbSearch.Search.map((m) => ({
+          title: String(m.Title || ""),
+          year: String(m.Year || ""),
+          releaseDate: "",
+          runtime: "",
+          genre: "",
+          director: "",
+          notes: "",
+          poster: m.Poster && m.Poster !== "N/A" ? m.Poster : null,
           _imdbID: m.imdbID,
         }));
       }
@@ -832,130 +1260,195 @@ async function doITunes() {
     if (!results?.length && !LOCAL_SERVER) {
       const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&limit=20`;
       let itunesData;
-      try { const res = await fetch(url); if (res.ok) itunesData = await res.json(); } catch (_) {}
-      if (!itunesData?.results?.length) { try { itunesData = await itunesJsonp(url); } catch (_) {} }
+      try {
+        const res = await fetch(url);
+        if (res.ok) itunesData = await res.json();
+      } catch (_) {}
+      if (!itunesData?.results?.length) {
+        try {
+          itunesData = await itunesJsonp(url);
+        } catch (_) {}
+      }
       const mapItem = (m) => {
-        let rt = '';
+        let rt = "";
         if (m.trackTimeMillis) {
           const ts = Math.round(m.trackTimeMillis / 1000);
-          const h = Math.floor(ts / 3600), mm = Math.floor((ts % 3600) / 60), ss = ts % 60;
-          rt = `${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+          const h = Math.floor(ts / 3600),
+            mm = Math.floor((ts % 3600) / 60),
+            ss = ts % 60;
+          rt = `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
         }
         return {
-          title: String(m.trackName || ''),
-          year: m.releaseDate ? m.releaseDate.substring(0, 4) : '',
-          releaseDate: m.releaseDate ? m.releaseDate.substring(0, 10) : '',
+          title: String(m.trackName || ""),
+          year: m.releaseDate ? m.releaseDate.substring(0, 4) : "",
+          releaseDate: m.releaseDate ? m.releaseDate.substring(0, 10) : "",
           runtime: rt,
-          genre: String(m.primaryGenreName || ''),
-          director: String(m.directorName || m.artistName || ''),
-          poster: m.artworkUrl100 ? m.artworkUrl100.replace(/\d+x\d+bb/, '600x600bb') : null,
-          notes: String(m.longDescription || ''),
+          genre: String(m.primaryGenreName || ""),
+          director: String(m.directorName || m.artistName || ""),
+          poster: m.artworkUrl100
+            ? m.artworkUrl100.replace(/\d+x\d+bb/, "600x600bb")
+            : null,
+          notes: String(m.longDescription || ""),
         };
       };
-      results = (itunesData?.results || []).filter(r => r.kind === 'feature-movie').map(mapItem);
+      results = (itunesData?.results || [])
+        .filter((r) => r.kind === "feature-movie")
+        .map(mapItem);
     }
     if (!results || !results.length) {
       if (!getOmdbKey()) {
-        const inp = Object.assign(document.createElement('input'), {
-          className: 'input', placeholder: 'Paste key from omdbapi.com/apikey.aspx…',
+        const inp = Object.assign(document.createElement("input"), {
+          className: "input",
+          placeholder: "Paste key from omdbapi.com/apikey.aspx…",
         });
-        inp.style.cssText = 'flex:1;min-width:180px;font-size:12px;padding:8px 10px';
-        const btn = Object.assign(document.createElement('button'), {
-          className: 'btn btn--amber btn--sm', textContent: 'Save & retry',
+        inp.style.cssText =
+          "flex:1;min-width:180px;font-size:12px;padding:8px 10px";
+        const btn = Object.assign(document.createElement("button"), {
+          className: "btn btn--amber btn--sm",
+          textContent: "Save & retry",
         });
         btn.onclick = () => {
           const k = inp.value.trim();
-          if (!k) { toast('Paste your OMDb key first', 'err'); return; }
-          saveOmdbKey(k); doITunes();
+          if (!k) {
+            toast("Paste your OMDb key first", "err");
+            return;
+          }
+          saveOmdbKey(k);
+          doITunes();
         };
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;gap:8px;margin-top:8px;flex-wrap:wrap';
+        const row = document.createElement("div");
+        row.style.cssText =
+          "display:flex;gap:8px;margin-top:8px;flex-wrap:wrap";
         row.append(inp, btn);
-        const hint = Object.assign(document.createElement('div'), { className: 'field-hint' });
-        hint.style.marginTop = '8px';
-        hint.append('No results from iTunes. For reliable lookups, add a free OMDb key:', row);
-        box.innerHTML = '';
+        const hint = Object.assign(document.createElement("div"), {
+          className: "field-hint",
+        });
+        hint.style.marginTop = "8px";
+        hint.append(
+          "No results from iTunes. For reliable lookups, add a free OMDb key:",
+          row,
+        );
+        box.innerHTML = "";
         box.appendChild(hint);
       } else {
         box.innerHTML = `<div class="field-hint" style="margin-top:8px">No online matches — fill the details by hand.</div>`;
       }
       return;
     }
-    box.innerHTML = `<div class="itunes-results">${results.map((m, i) => `
+    box.innerHTML = `<div class="itunes-results">${results
+      .map(
+        (m, i) => `
       <div class="itunes-row" data-i="${i}">
-        ${m.poster ? `<img src="${esc(m.poster)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''">` : ''}
-        <div style="${m.poster ? 'display:none' : ''};width:38px;height:56px;border-radius:4px;background:var(--ink-3);flex-shrink:0"></div>
-        <div><div class="ir-t">${esc(m.title)}</div><div class="ir-m">${[m.year, m.director, m.genre].filter(Boolean).map(esc).join(' · ')}</div></div>
-      </div>`).join('')}</div>`;
-    $$('.itunes-row', box).forEach((row) => row.onclick = async () => {
-      const m = results[+row.dataset.i];
-      if (!$('#fTitle').value) $('#fTitle').value = m.title;
-      if (m._imdbID) {
-        // OMDb result — fetch full details (runtime, genre, director, etc.)
-        box.innerHTML = `<div class="field-hint" style="margin-top:8px;display:flex;align-items:center;gap:8px"><span class="spinner"></span> Loading details…</div>`;
-        const detail = await omdbFetch(`i=${m._imdbID}`);
-        if (detail) {
-          const rd = parseOmdbDate(detail.Released), rt = parseOmdbRuntime(detail.Runtime);
-          if (rd) $('#fRelease').value = rd;
-          if (rt) $('#fRuntime').value = rt;
-          if (detail.Genre     && detail.Genre     !== 'N/A') $('#fGenre').value    = detail.Genre;
-          if (detail.Director  && detail.Director  !== 'N/A') $('#fDirector').value = detail.Director;
-          const actors = $('#fActors');
-          if (!actors.value && detail.Actors && detail.Actors !== 'N/A') actors.value = detail.Actors;
-          const notes = $('#fNotes');
-          if (!notes.value && detail.Plot && detail.Plot !== 'N/A') notes.value = detail.Plot;
-          const studio = $('#fStudio');
-          if (!studio.value && detail.Production && detail.Production !== 'N/A') studio.value = detail.Production;
-        }
-      } else {
-        // iTunes result — all fields available immediately
-        if (m.releaseDate) $('#fRelease').value = m.releaseDate;
-        if (m.runtime)     $('#fRuntime').value = m.runtime;
-        if (m.genre)       $('#fGenre').value   = m.genre;
-        if (m.director)    $('#fDirector').value = m.director;
-        if (m.notes && !$('#fNotes').value) $('#fNotes').value = m.notes;
-      }
-      box.innerHTML = `<div class="field-hint" style="margin-top:8px;color:var(--amber);display:flex;align-items:center;gap:6px"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><use href="#ic-check"/></svg> Metadata filled from "${esc(m.title)}".</div>`;
-    });
+        ${m.poster ? `<img src="${esc(m.poster)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display=''">` : ""}
+        <div style="${m.poster ? "display:none" : ""};width:38px;height:56px;border-radius:4px;background:var(--ink-3);flex-shrink:0"></div>
+        <div><div class="ir-t">${esc(m.title)}</div><div class="ir-m">${[m.year, m.director, m.genre].filter(Boolean).map(esc).join(" · ")}</div></div>
+      </div>`,
+      )
+      .join("")}</div>`;
+    $$(".itunes-row", box).forEach(
+      (row) =>
+        (row.onclick = async () => {
+          const m = results[+row.dataset.i];
+          if (!$("#fTitle").value) $("#fTitle").value = m.title;
+          if (m._imdbID) {
+            // OMDb result — fetch full details (runtime, genre, director, etc.)
+            box.innerHTML = `<div class="field-hint" style="margin-top:8px;display:flex;align-items:center;gap:8px"><span class="spinner"></span> Loading details…</div>`;
+            const detail = await omdbFetch(`i=${m._imdbID}`);
+            if (detail) {
+              const rd = parseOmdbDate(detail.Released),
+                rt = parseOmdbRuntime(detail.Runtime);
+              if (rd) $("#fRelease").value = rd;
+              if (rt) $("#fRuntime").value = rt;
+              if (detail.Genre && detail.Genre !== "N/A")
+                $("#fGenre").value = detail.Genre;
+              if (detail.Director && detail.Director !== "N/A")
+                $("#fDirector").value = detail.Director;
+              const actors = $("#fActors");
+              if (!actors.value && detail.Actors && detail.Actors !== "N/A")
+                actors.value = detail.Actors;
+              const notes = $("#fNotes");
+              if (!notes.value && detail.Plot && detail.Plot !== "N/A")
+                notes.value = detail.Plot;
+              const studio = $("#fStudio");
+              if (
+                !studio.value &&
+                detail.Production &&
+                detail.Production !== "N/A"
+              )
+                studio.value = detail.Production;
+            }
+          } else {
+            // iTunes result — all fields available immediately
+            if (m.releaseDate) $("#fRelease").value = m.releaseDate;
+            if (m.runtime) $("#fRuntime").value = m.runtime;
+            if (m.genre) $("#fGenre").value = m.genre;
+            if (m.director) $("#fDirector").value = m.director;
+            if (m.notes && !$("#fNotes").value) $("#fNotes").value = m.notes;
+          }
+          box.innerHTML = `<div class="field-hint" style="margin-top:8px;color:var(--amber);display:flex;align-items:center;gap:6px"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><use href="#ic-check"/></svg> Metadata filled from "${esc(m.title)}".</div>`;
+        }),
+    );
   } catch (e) {
     box.innerHTML = `<div class="field-hint" style="margin-top:8px">Lookup unavailable — ${esc(e.message)}</div>`;
   }
 }
 
 async function saveMovie() {
-  if (!LOCAL_SERVER) { toast('Editing is read-only in the published archive', 'info'); return; }
+  if (!LOCAL_SERVER) {
+    toast("Editing is read-only in the published archive", "info");
+    return;
+  }
   const rec = {
-    Title: $('#fTitle').value.trim(),
+    Title: $("#fTitle").value.trim(),
     Rating: modalState.rating,
-    WatchDate: modalState.status === 'want_to_watch' ? [] : modalState.dates,
+    WatchDate: modalState.status === "want_to_watch" ? [] : modalState.dates,
     Status: modalState.status,
-    PriorWatch: modalState.status === 'want_to_watch' ? null : modalState.prior,
-    ReleaseDate: $('#fRelease').value.trim(),
-    Runtime: $('#fRuntime').value.trim(),
-    Genre: $('#fGenre').value.trim(),
-    Director: $('#fDirector').value.trim(),
-    Studio: $('#fStudio').value.trim(),
-    Actors: $('#fActors').value.trim(),
-    Notes: $('#fNotes').value,
+    PriorWatch: modalState.status === "want_to_watch" ? null : modalState.prior,
+    ReleaseDate: $("#fRelease").value.trim(),
+    Runtime: $("#fRuntime").value.trim(),
+    Genre: $("#fGenre").value.trim(),
+    Director: $("#fDirector").value.trim(),
+    Studio: $("#fStudio").value.trim(),
+    Actors: $("#fActors").value.trim(),
+    Notes: $("#fNotes").value,
   };
-  if (!rec.Title) { toast('A title is required', 'err'); $('#fTitle').focus(); return; }
+  if (!rec.Title) {
+    toast("A title is required", "err");
+    $("#fTitle").focus();
+    return;
+  }
   try {
     if (modalState.isNew) {
-      await api('/api/movies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rec) });
-      toast(`Added to the archive — ${rec.Title}`, 'ok');
+      await api("/api/movies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(rec),
+      });
+      toast(`Added to the archive — ${rec.Title}`, "ok");
     } else {
-      await api(`/api/movies/${modalState.idx}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rec) });
-      toast(`Record updated — ${rec.Title}`, 'ok');
+      await api(`/api/movies/${modalState.idx}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(rec),
+      });
+      toast(`Record updated — ${rec.Title}`, "ok");
     }
     closeModal();
     await reloadAndRender();
-  } catch (e) { toast(e.message, 'err'); }
+  } catch (e) {
+    toast(e.message, "err");
+  }
 }
 
 function closeModal() {
-  $('#modal').classList.remove('is-open');
-  $('#modal').setAttribute('aria-hidden', 'true');
-  setTimeout(() => { if (!$('#drawer').classList.contains('is-open')) { $('#scrim').classList.remove('is-open'); $('#scrim').hidden = true; } }, 420);
+  $("#modal").classList.remove("is-open");
+  $("#modal").setAttribute("aria-hidden", "true");
+  setTimeout(() => {
+    if (!$("#drawer").classList.contains("is-open")) {
+      $("#scrim").classList.remove("is-open");
+      $("#scrim").hidden = true;
+    }
+  }, 420);
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -965,37 +1458,57 @@ async function exportLLM() {
   try {
     let text, count;
     if (LOCAL_SERVER) {
-      const res = await api('/api/export/llm');
-      text = res.text; count = res.count;
+      const res = await api("/api/export/llm");
+      text = res.text;
+      count = res.count;
     } else {
       const min = state.records.map((r) => ({
-        Title: r.Title, ReleaseDate: r.ReleaseDate, WatchDate: r.WatchDate,
-        Status: r.Status, PriorWatch: r.PriorWatch, Rating: r.Rating, Notes: r.Notes,
+        Title: r.Title,
+        ReleaseDate: r.ReleaseDate,
+        WatchDate: r.WatchDate,
+        Status: r.Status,
+        PriorWatch: r.PriorWatch,
+        Rating: r.Rating,
+        Notes: r.Notes,
       }));
-      text = JSON.stringify({ _metadata: state.db._metadata, log: min }, null, 2);
+      text = JSON.stringify(
+        { _metadata: state.db._metadata, log: min },
+        null,
+        2,
+      );
       count = min.length;
     }
     await navigator.clipboard.writeText(text);
-    toast(`Copied ${count} records + command reference for your LLM`, 'ok');
+    toast(`Copied ${count} records + command reference for your LLM`, "ok");
   } catch (e) {
-    toast(`Copy failed — ${e.message}`, 'err');
+    toast(`Copy failed — ${e.message}`, "err");
   }
 }
 
 function surprise() {
-  const pool = state.records.filter((r) => r.Status === 'want_to_watch');
-  const fallback = state.records.filter((r) => r.Status !== 'want_to_watch' && !r.Rating);
-  const list = pool.length ? pool : (fallback.length ? fallback : state.records);
+  const pool = state.records.filter((r) => r.Status === "want_to_watch");
+  const fallback = state.records.filter(
+    (r) => r.Status !== "want_to_watch" && !r.Rating,
+  );
+  const list = pool.length ? pool : fallback.length ? fallback : state.records;
   if (!list.length) return;
   const pick = list[Math.floor(Math.random() * list.length)];
-  toast(pool.length ? "Tonight's feature presentation…" : 'How about a verdict on this one?', 'info');
+  toast(
+    pool.length
+      ? "Tonight's feature presentation…"
+      : "How about a verdict on this one?",
+    "info",
+  );
   openDrawer(pick);
 }
 
 async function closeRoom() {
   if (!LOCAL_SERVER) return;
-  if (!confirm('Close the projection room? This stops the local server.')) return;
-  try { await api('/api/shutdown', { method: 'POST' }); } catch (_) {}
+  if (!confirm("Close the projection room? This stops the local server."))
+    return;
+  try {
+    await api("/api/shutdown", { method: "POST" });
+  } catch (_) {}
   document.body.innerHTML = `<div style="height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center;font-family:var(--display)">
     <svg width="48" height="48" viewBox="0 0 24 24" style="color:var(--amber-deep)"><use href="#ic-reel"/></svg>
     <div style="font-size:34px;color:var(--paper)">The house lights are up.</div>
@@ -1004,13 +1517,16 @@ async function closeRoom() {
 
 /* ── toasts ───────────────────────────────────────────────────────────── */
 let toastTimer;
-function toast(msg, type = 'ok') {
-  const ic = type === 'err' ? 'x' : type === 'info' ? 'sparkle' : 'check';
-  const el = document.createElement('div');
+function toast(msg, type = "ok") {
+  const ic = type === "err" ? "x" : type === "info" ? "sparkle" : "check";
+  const el = document.createElement("div");
   el.className = `toast toast--${type}`;
   el.innerHTML = `${icon(ic)}<span>${esc(msg)}</span>`;
-  $('#toasts').appendChild(el);
-  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 360); }, 3200);
+  $("#toasts").appendChild(el);
+  setTimeout(() => {
+    el.classList.add("out");
+    setTimeout(() => el.remove(), 360);
+  }, 3200);
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -1026,36 +1542,50 @@ function toast(msg, type = 'ok') {
    ════════════════════════════════════════════════════════════════════════ */
 
 // ── Replace 'setup' with your generated hash after step 3 above ────────
-const OWNER_PASSWORD_HASH = 'setup';
+const OWNER_PASSWORD_HASH =
+  "4e52baa7069452bcb2cb5776625fb855e6395cd9588bb80a62bb33a17e066bd1";
 // ───────────────────────────────────────────────────────────────────────
 
-const PASSKEY_STORE_KEY = 'pr_passkey_v1';
-const SESSION_KEY       = 'pr_session_v1';
-const PW_SALT           = 'projection-room-v1:';
+const PASSKEY_STORE_KEY = "pr_passkey_v1";
+const SESSION_KEY = "pr_session_v1";
+const PW_SALT = "projection-room-v1:";
 
 const getPasskeyId = () => localStorage.getItem(PASSKEY_STORE_KEY);
 const setPasskeyId = (id) => localStorage.setItem(PASSKEY_STORE_KEY, id);
-const isAuthed     = ()  => sessionStorage.getItem(SESSION_KEY) === '1';
-const markAuthed   = ()  => sessionStorage.setItem(SESSION_KEY, '1');
+const isAuthed = () => sessionStorage.getItem(SESSION_KEY) === "1";
+const markAuthed = () => sessionStorage.setItem(SESSION_KEY, "1");
 
 async function sha256hex(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(PW_SALT + str));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const buf = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(PW_SALT + str),
+  );
+  return [...new Uint8Array(buf)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 const b64enc = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
-const b64dec = (s)   => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const b64dec = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
-const passkeyAvailable = () => typeof PublicKeyCredential !== 'undefined' &&
-  typeof navigator.credentials?.create === 'function';
+const passkeyAvailable = () =>
+  typeof PublicKeyCredential !== "undefined" &&
+  typeof navigator.credentials?.create === "function";
 
 async function registerPasskey() {
   const cred = await navigator.credentials.create({
     publicKey: {
       challenge: crypto.getRandomValues(new Uint8Array(32)),
-      rp: { name: 'The Projection Room', id: window.location.hostname },
-      user: { id: new Uint8Array([1]), name: 'owner', displayName: 'Owner' },
-      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-      authenticatorSelection: { authenticatorAttachment: 'platform', residentKey: 'preferred', userVerification: 'preferred' },
+      rp: { name: "The Projection Room", id: window.location.hostname },
+      user: { id: new Uint8Array([1]), name: "owner", displayName: "Owner" },
+      pubKeyCredParams: [
+        { type: "public-key", alg: -7 },
+        { type: "public-key", alg: -257 },
+      ],
+      authenticatorSelection: {
+        authenticatorAttachment: "platform",
+        residentKey: "preferred",
+        userVerification: "preferred",
+      },
       timeout: 60000,
     },
   });
@@ -1068,9 +1598,15 @@ async function authenticatePasskey(credId) {
       challenge: crypto.getRandomValues(new Uint8Array(32)),
       rpId: window.location.hostname,
       allowCredentials: credId
-        ? [{ type: 'public-key', id: b64dec(credId), transports: ['internal', 'hybrid'] }]
+        ? [
+            {
+              type: "public-key",
+              id: b64dec(credId),
+              transports: ["internal", "hybrid"],
+            },
+          ]
         : [],
-      userVerification: 'preferred',
+      userVerification: "preferred",
       timeout: 60000,
     },
   });
@@ -1079,26 +1615,31 @@ async function authenticatePasskey(credId) {
 /* ── overlay ──────────────────────────────────────────────────────────── */
 
 function showAuthOverlay() {
-  const card    = document.getElementById('authCard');
-  const overlay = document.getElementById('authOverlay');
-  card.innerHTML = (OWNER_PASSWORD_HASH === 'setup') ? buildHashGenHTML() : buildLoginHTML();
-  overlay.removeAttribute('hidden');
-  requestAnimationFrame(() => overlay.classList.add('is-open'));
-  if (OWNER_PASSWORD_HASH === 'setup') wireHashGenUI();
+  const card = document.getElementById("authCard");
+  const overlay = document.getElementById("authOverlay");
+  card.innerHTML =
+    OWNER_PASSWORD_HASH === "setup" ? buildHashGenHTML() : buildLoginHTML();
+  overlay.removeAttribute("hidden");
+  requestAnimationFrame(() => overlay.classList.add("is-open"));
+  if (OWNER_PASSWORD_HASH === "setup") wireHashGenUI();
   else wireLoginUI();
 }
 
 function hideAuthOverlay() {
-  const overlay = document.getElementById('authOverlay');
-  overlay.classList.remove('is-open');
-  setTimeout(() => overlay.setAttribute('hidden', ''), 500);
+  const overlay = document.getElementById("authOverlay");
+  overlay.classList.remove("is-open");
+  setTimeout(() => overlay.setAttribute("hidden", ""), 500);
 }
 
 async function onAuthSuccess() {
   markAuthed();
   hideAuthOverlay();
-  try { await loadDb(); render(); } catch (e) {
-    $('.stage').innerHTML = `<div class="empty-state"><p class="empty-title">Couldn't reach the projector.</p><p class="empty-sub">${esc(e.message)}</p></div>`;
+  try {
+    await loadDb();
+    render();
+  } catch (e) {
+    $(".stage").innerHTML =
+      `<div class="empty-state"><p class="empty-title">Couldn't reach the projector.</p><p class="empty-sub">${esc(e.message)}</p></div>`;
   }
   // Offer passkey registration on this device if not already set up
   if (!getPasskeyId() && passkeyAvailable()) offerPasskeyRegistration();
@@ -1108,19 +1649,19 @@ async function onAuthSuccess() {
 
 function buildHashGenHTML() {
   return `
-    <div class="auth-reel">${icon('reel')}</div>
+    <div class="auth-reel">${icon("reel")}</div>
     <p class="auth-kicker"><span class="dot"></span> one-time setup</p>
     <h1 class="auth-title">Generate your<br><em>access hash</em></h1>
     <p class="auth-sub">Enter a password, copy the hash, paste it into <code style="font-family:var(--mono);color:var(--amber);font-size:12px">app.js</code>, and redeploy. This screen disappears after that.</p>
     <div class="auth-pw-fields">
       <input class="input auth-input" id="authPw1" type="password" placeholder="Choose a password (min 8 chars)" autocomplete="new-password"/>
     </div>
-    <button class="btn btn--amber btn--block" id="authGenBtn">${icon('sparkle')}<span>Generate hash</span></button>
+    <button class="btn btn--amber btn--block" id="authGenBtn">${icon("sparkle")}<span>Generate hash</span></button>
     <div id="authHashResult" hidden style="margin-top:18px;text-align:left">
       <p style="font-family:var(--mono);font-size:11px;color:var(--paper-faint);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px">Replace <code style="color:var(--amber)">'setup'</code> in app.js with:</p>
       <div class="auth-hash-box">
         <code class="auth-hash-val" id="authHashVal"></code>
-        <button class="btn btn--ghost btn--sm" id="authHashCopy">${icon('clip')}<span>Copy</span></button>
+        <button class="btn btn--ghost btn--sm" id="authHashCopy">${icon("clip")}<span>Copy</span></button>
       </div>
       <p style="margin-top:10px;font-size:12px;color:var(--amber-deep)">Push &amp; redeploy — this screen becomes the login screen.</p>
     </div>
@@ -1128,22 +1669,34 @@ function buildHashGenHTML() {
 }
 
 function wireHashGenUI() {
-  const setErr = (msg) => { const el = document.getElementById('authErr'); if (el) el.textContent = msg; };
+  const setErr = (msg) => {
+    const el = document.getElementById("authErr");
+    if (el) el.textContent = msg;
+  };
   const doGen = async () => {
-    const pw = document.getElementById('authPw1').value;
-    if (!pw) { setErr('Enter a password first.'); return; }
-    if (pw.length < 8) { setErr('Password must be at least 8 characters.'); return; }
-    setErr('');
+    const pw = document.getElementById("authPw1").value;
+    if (!pw) {
+      setErr("Enter a password first.");
+      return;
+    }
+    if (pw.length < 8) {
+      setErr("Password must be at least 8 characters.");
+      return;
+    }
+    setErr("");
     const hash = await sha256hex(pw);
-    document.getElementById('authHashVal').textContent = hash;
-    document.getElementById('authHashResult').removeAttribute('hidden');
-    document.getElementById('authHashCopy').onclick = async () => {
+    document.getElementById("authHashVal").textContent = hash;
+    document.getElementById("authHashResult").removeAttribute("hidden");
+    document.getElementById("authHashCopy").onclick = async () => {
       await navigator.clipboard.writeText(hash);
-      document.getElementById('authHashCopy').innerHTML = `${icon('check')}<span>Copied!</span>`;
+      document.getElementById("authHashCopy").innerHTML =
+        `${icon("check")}<span>Copied!</span>`;
     };
   };
-  document.getElementById('authGenBtn').onclick = doGen;
-  document.getElementById('authPw1').addEventListener('keydown', (e) => { if (e.key === 'Enter') doGen(); });
+  document.getElementById("authGenBtn").onclick = doGen;
+  document.getElementById("authPw1").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doGen();
+  });
 }
 
 /* ── login UI ─────────────────────────────────────────────────────────── */
@@ -1151,51 +1704,63 @@ function wireHashGenUI() {
 function buildLoginHTML() {
   const hasPk = !!getPasskeyId() && passkeyAvailable();
   return `
-    <div class="auth-reel">${icon('reel')}</div>
+    <div class="auth-reel">${icon("reel")}</div>
     <p class="auth-kicker"><span class="dot"></span> private archive</p>
     <h1 class="auth-title">The<br><em>Projection Room</em></h1>
     <p class="auth-sub">Authentication required to enter.</p>
-    ${hasPk ? `<button class="btn btn--amber btn--block" id="authPasskeyBtn">${icon('check')}<span>Enter with passkey</span></button>
-    <p class="auth-divider">or enter password</p>` : ''}
+    ${
+      hasPk
+        ? `<button class="btn btn--amber btn--block" id="authPasskeyBtn">${icon("check")}<span>Enter with passkey</span></button>
+    <p class="auth-divider">or enter password</p>`
+        : ""
+    }
     <div class="auth-pw-wrap">
       <input class="input auth-input" id="authPwInput" type="password" placeholder="Password" autocomplete="current-password"/>
-      <button class="btn btn--ghost btn--block" id="authPwBtn">${icon('check')}<span>Enter</span></button>
+      <button class="btn btn--ghost btn--block" id="authPwBtn">${icon("check")}<span>Enter</span></button>
     </div>
     <p class="auth-err" id="authErr" aria-live="polite"></p>`;
 }
 
 function wireLoginUI() {
   const passkeyId = getPasskeyId();
-  const setErr    = (msg) => { const el = document.getElementById('authErr'); if (el) el.textContent = msg; };
-
-  const pkBtn = document.getElementById('authPasskeyBtn');
-  if (pkBtn) pkBtn.onclick = async () => {
-    pkBtn.disabled = true; setErr('');
-    try {
-      await authenticatePasskey(passkeyId);
-      await onAuthSuccess();
-    } catch (e) {
-      if (e.name !== 'NotAllowedError') setErr(`Passkey failed: ${e.message}`);
-      pkBtn.disabled = false;
-    }
+  const setErr = (msg) => {
+    const el = document.getElementById("authErr");
+    if (el) el.textContent = msg;
   };
 
-  const pwInput = document.getElementById('authPwInput');
-  const pwBtn   = document.getElementById('authPwBtn');
+  const pkBtn = document.getElementById("authPasskeyBtn");
+  if (pkBtn)
+    pkBtn.onclick = async () => {
+      pkBtn.disabled = true;
+      setErr("");
+      try {
+        await authenticatePasskey(passkeyId);
+        await onAuthSuccess();
+      } catch (e) {
+        if (e.name !== "NotAllowedError")
+          setErr(`Passkey failed: ${e.message}`);
+        pkBtn.disabled = false;
+      }
+    };
+
+  const pwInput = document.getElementById("authPwInput");
+  const pwBtn = document.getElementById("authPwBtn");
   const tryPw = async () => {
     if (!pwInput.value) return;
-    setErr('');
+    setErr("");
     const hash = await sha256hex(pwInput.value);
     if (hash === OWNER_PASSWORD_HASH) {
       await onAuthSuccess();
     } else {
-      setErr('Incorrect password.');
-      pwInput.value = '';
+      setErr("Incorrect password.");
+      pwInput.value = "";
       pwInput.focus();
     }
   };
   pwBtn.onclick = tryPw;
-  pwInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryPw(); });
+  pwInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") tryPw();
+  });
   if (pkBtn) setTimeout(() => pkBtn.click(), 350);
   else setTimeout(() => pwInput.focus(), 200);
 }
@@ -1203,21 +1768,22 @@ function wireLoginUI() {
 /* ── passkey offer (toast shown after first successful password auth) ─── */
 
 function offerPasskeyRegistration() {
-  const wrap = document.createElement('div');
-  wrap.className = 'toast toast--info auth-pk-offer';
-  wrap.innerHTML = `${icon('check')}<span>Register a passkey for quicker access on this device?</span>
+  const wrap = document.createElement("div");
+  wrap.className = "toast toast--info auth-pk-offer";
+  wrap.innerHTML = `${icon("check")}<span>Register a passkey for quicker access on this device?</span>
     <button class="btn btn--amber btn--sm" id="offerPkYes">Register</button>
-    <button class="icon-btn" id="offerPkNo">${icon('x')}</button>`;
-  document.getElementById('toasts').appendChild(wrap);
-  document.getElementById('offerPkNo').onclick  = () => wrap.remove();
-  document.getElementById('offerPkYes').onclick = async () => {
+    <button class="icon-btn" id="offerPkNo">${icon("x")}</button>`;
+  document.getElementById("toasts").appendChild(wrap);
+  document.getElementById("offerPkNo").onclick = () => wrap.remove();
+  document.getElementById("offerPkYes").onclick = async () => {
     wrap.remove();
     try {
       const id = await registerPasskey();
       setPasskeyId(id);
-      toast('Passkey registered — tap to enter next time.', 'ok');
+      toast("Passkey registered — tap to enter next time.", "ok");
     } catch (e) {
-      if (e.name !== 'NotAllowedError') toast(`Passkey registration failed: ${e.message}`, 'err');
+      if (e.name !== "NotAllowedError")
+        toast(`Passkey registration failed: ${e.message}`, "err");
     }
   };
 }
@@ -1226,69 +1792,133 @@ function offerPasskeyRegistration() {
    EVENTS + INIT
    ════════════════════════════════════════════════════════════════════════ */
 function wireGlobal() {
-  $('#goHome').onclick = () => setView('dashboard');
-  $('#goHome').onkeydown = (e) => { if (e.key === 'Enter') setView('dashboard'); };
-  $$('.navtab').forEach((t) => t.onclick = () => setView(t.dataset.go));
-  $('#btnAdd').onclick = () => openModal();
-  $('#btnExport').onclick = exportLLM;
-  $('#btnSurprise').onclick = surprise;
-  $('#btnClose').onclick = closeRoom;
+  $("#goHome").onclick = () => setView("dashboard");
+  $("#goHome").onkeydown = (e) => {
+    if (e.key === "Enter") setView("dashboard");
+  };
+  $$(".navtab").forEach((t) => (t.onclick = () => setView(t.dataset.go)));
+  $("#btnAdd").onclick = () => openModal();
+  $("#btnExport").onclick = exportLLM;
+  $("#btnSurprise").onclick = surprise;
+  $("#btnClose").onclick = closeRoom;
   if (!LOCAL_SERVER) {
-    $('#btnAdd').hidden = true;
-    $('#btnClose').hidden = true;
+    $("#btnAdd").hidden = true;
+    $("#btnClose").hidden = true;
   }
-  $('#btnSearch').onclick = () => { setView('library'); setTimeout(() => $('#searchInput').focus(), 60); };
+  $("#btnSearch").onclick = () => {
+    setView("library");
+    setTimeout(() => $("#searchInput").focus(), 60);
+  };
 
   // search
-  const si = $('#searchInput');
-  si.addEventListener('input', () => { state.filters.search = si.value; $('#searchClear').hidden = !si.value; renderLibrary(); });
-  $('#searchClear').onclick = () => { state.filters.search = ''; si.value = ''; $('#searchClear').hidden = true; si.focus(); renderLibrary(); };
+  const si = $("#searchInput");
+  si.addEventListener("input", () => {
+    state.filters.search = si.value;
+    $("#searchClear").hidden = !si.value;
+    renderLibrary();
+  });
+  $("#searchClear").onclick = () => {
+    state.filters.search = "";
+    si.value = "";
+    $("#searchClear").hidden = true;
+    si.focus();
+    renderLibrary();
+  };
 
   // status seg
-  $$('#statusSeg .seg__btn').forEach((b) => b.onclick = () => { state.filters.status = b.dataset.status; syncFilterUI(); renderLibrary(); });
+  $$("#statusSeg .seg__btn").forEach(
+    (b) =>
+      (b.onclick = () => {
+        state.filters.status = b.dataset.status;
+        syncFilterUI();
+        renderLibrary();
+      }),
+  );
 
   // sort
-  $('#sortSelect').onchange = (e) => { state.sort = e.target.value; renderLibrary(); };
+  $("#sortSelect").onchange = (e) => {
+    state.sort = e.target.value;
+    renderLibrary();
+  };
 
   // filters toggle
-  $('#btnFilters').onclick = () => { const f = $('#filterbar'); f.hidden = !f.hidden; };
-  $('#btnClearFilters').onclick = () => {
-    state.filters.genres.clear(); state.filters.minRating = 0; state.filters.decade = null;
-    syncFilterUI(); renderLibrary();
+  $("#btnFilters").onclick = () => {
+    const f = $("#filterbar");
+    f.hidden = !f.hidden;
+  };
+  $("#btnClearFilters").onclick = () => {
+    state.filters.genres.clear();
+    state.filters.minRating = 0;
+    state.filters.decade = null;
+    syncFilterUI();
+    renderLibrary();
   };
 
   // view toggle
-  $$('#viewToggle .viewtoggle__btn').forEach((b) => b.onclick = () => {
-    state.mode = b.dataset.mode;
-    $$('#viewToggle .viewtoggle__btn').forEach((x) => x.classList.toggle('is-active', x === b));
-    renderLibrary();
-  });
+  $$("#viewToggle .viewtoggle__btn").forEach(
+    (b) =>
+      (b.onclick = () => {
+        state.mode = b.dataset.mode;
+        $$("#viewToggle .viewtoggle__btn").forEach((x) =>
+          x.classList.toggle("is-active", x === b),
+        );
+        renderLibrary();
+      }),
+  );
 
   // ledger header sort
-  $$('.ledger th.sortable').forEach((th) => th.onclick = () => {
-    const map = { title: 'title-asc', year: 'year-desc', rating: 'rating-desc', runtime: 'runtime-desc', watch: 'watch-desc' };
-    state.sort = map[th.dataset.sort] || state.sort;
-    $$('.ledger th.sortable').forEach((x) => x.removeAttribute('data-dir'));
-    th.setAttribute('data-dir', state.sort.endsWith('asc') ? 'asc' : 'desc');
-    renderLibrary();
-  });
+  $$(".ledger th.sortable").forEach(
+    (th) =>
+      (th.onclick = () => {
+        const map = {
+          title: "title-asc",
+          year: "year-desc",
+          rating: "rating-desc",
+          runtime: "runtime-desc",
+          watch: "watch-desc",
+        };
+        state.sort = map[th.dataset.sort] || state.sort;
+        $$(".ledger th.sortable").forEach((x) => x.removeAttribute("data-dir"));
+        th.setAttribute(
+          "data-dir",
+          state.sort.endsWith("asc") ? "asc" : "desc",
+        );
+        renderLibrary();
+      }),
+  );
 
   // scrim closes overlays
-  $('#scrim').onclick = () => { closeDrawer(); closeModal(); };
+  $("#scrim").onclick = () => {
+    closeDrawer();
+    closeModal();
+  };
 
   // keyboard
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { closeDrawer(); closeModal(); return; }
-    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeDrawer();
+      closeModal();
+      return;
+    }
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(
+      document.activeElement?.tagName,
+    );
     if (typing) return;
-    if (e.key === '/') { e.preventDefault(); setView('library'); setTimeout(() => $('#searchInput').focus(), 60); }
-    else if (e.key === 'n') { e.preventDefault(); openModal(); }
-    else if (e.key === 'd') setView('dashboard');
-    else if (e.key === 'l') setView('library');
-    else if (e.key === 'r') surprise();
-    else if (e.key === 'g' && state.view === 'library') {
-      state.mode = state.mode === 'wall' ? 'list' : 'wall';
-      $$('#viewToggle .viewtoggle__btn').forEach((x) => x.classList.toggle('is-active', x.dataset.mode === state.mode));
+    if (e.key === "/") {
+      e.preventDefault();
+      setView("library");
+      setTimeout(() => $("#searchInput").focus(), 60);
+    } else if (e.key === "n") {
+      e.preventDefault();
+      openModal();
+    } else if (e.key === "d") setView("dashboard");
+    else if (e.key === "l") setView("library");
+    else if (e.key === "r") surprise();
+    else if (e.key === "g" && state.view === "library") {
+      state.mode = state.mode === "wall" ? "list" : "wall";
+      $$("#viewToggle .viewtoggle__btn").forEach((x) =>
+        x.classList.toggle("is-active", x.dataset.mode === state.mode),
+      );
       renderLibrary();
     }
   });
@@ -1296,13 +1926,17 @@ function wireGlobal() {
 
 async function init() {
   wireGlobal();
-  if (!LOCAL_SERVER && !isAuthed()) { showAuthOverlay(); return; }
+  if (!LOCAL_SERVER && !isAuthed()) {
+    showAuthOverlay();
+    return;
+  }
   try {
     await loadDb();
     render();
   } catch (e) {
-    $('.stage').innerHTML = `<div class="empty-state"><p class="empty-title">Couldn't reach the projector.</p><p class="empty-sub">${esc(e.message)}</p></div>`;
+    $(".stage").innerHTML =
+      `<div class="empty-state"><p class="empty-title">Couldn't reach the projector.</p><p class="empty-sub">${esc(e.message)}</p></div>`;
   }
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener("DOMContentLoaded", init);
