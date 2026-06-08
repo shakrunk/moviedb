@@ -162,7 +162,8 @@ function Invoke-ITunesSearch {
     param([string]$Term, [int]$Limit = 8, [switch]$Force)
     # Respect the circuit breaker for automatic lookups; -Force (explicit user action) bypasses it.
     if (-not $Force -and $script:ITunesDownUntil -and (Get-Date) -lt $script:ITunesDownUntil) { return @() }
-    $uri = "https://itunes.apple.com/search?term=$([uri]::EscapeDataString($Term))&country=US&entity=movie&limit=$Limit"
+    # entity=movie is broken on the iTunes API — search without it and filter client-side.
+    $uri = "https://itunes.apple.com/search?term=$([uri]::EscapeDataString($Term))&limit=25"
     try {
         $res = Invoke-RestMethod -Uri $uri -TimeoutSec 5
         $script:ITunesDownUntil = $null   # success closes the breaker
@@ -172,8 +173,10 @@ function Invoke-ITunesSearch {
     }
     $out = @()
     if ($res.resultCount -gt 0) {
-        foreach ($m in $res.results) {
-            $year = if ($m.releaseDate) { $m.releaseDate.Substring(0,4) } else { '' }
+        foreach ($m in ($res.results | Where-Object { $_.kind -eq 'feature-movie' })) {
+            # releaseDate arrives as a DateTime object (Invoke-RestMethod auto-converts)
+            $rdStr = if ($m.releaseDate) { ([datetime]$m.releaseDate).ToString('yyyy-MM-dd') } else { '' }
+            $year = if ($rdStr) { $rdStr.Substring(0,4) } else { '' }
             $rt = ''
             if ($m.trackTimeMillis) {
                 $ts = [TimeSpan]::FromMilliseconds($m.trackTimeMillis)
@@ -182,7 +185,7 @@ function Invoke-ITunesSearch {
             $out += [PSCustomObject]@{
                 title       = [string]$m.trackName
                 year        = $year
-                releaseDate = if ($m.releaseDate) { $m.releaseDate.Substring(0,10) } else { '' }
+                releaseDate = $rdStr
                 runtime     = $rt
                 genre       = [string]$m.primaryGenreName
                 director    = if ($m.directorName) { [string]$m.directorName } else { [string]$m.artistName }
@@ -330,10 +333,15 @@ function Invoke-Api {
             $term = if ($year) { "$title $year" } else { $title }
             $results = Invoke-ITunesSearch $term 5
             if ($results.Count -gt 0) {
-                # Prefer an exact-ish title + matching year when possible.
-                $best = $results | Where-Object { $_.poster } | Select-Object -First 1
+                # Require the result title to actually contain the search title (prevents wrong-movie posters).
+                $titleNorm = ($title -replace '[^a-zA-Z0-9]', '').ToLower()
+                $matched = $results | Where-Object {
+                    $tn = ($_.title -replace '[^a-zA-Z0-9]', '').ToLower()
+                    $_.poster -and $tn.Contains($titleNorm)
+                }
+                $best = $matched | Select-Object -First 1
                 if ($year) {
-                    $ym = $results | Where-Object { $_.poster -and $_.year -eq $year } | Select-Object -First 1
+                    $ym = $matched | Where-Object { $_.year -eq $year } | Select-Object -First 1
                     if ($ym) { $best = $ym }
                 }
                 if ($best) { $url = $best.poster }
