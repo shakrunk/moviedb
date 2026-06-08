@@ -1014,6 +1014,215 @@ function toast(msg, type = 'ok') {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
+   AUTH — owner-only gate for the static (GitHub Pages) version
+   ────────────────────────────────────────────────────────────────────────
+   SETUP (one-time):
+     1. Leave OWNER_PASSWORD_HASH as 'setup' and deploy.
+     2. Visit the GitHub Pages URL — you'll see a hash generator.
+     3. Enter your desired password → copy the hash shown.
+     4. Replace 'setup' below with that hash, then push & redeploy.
+   After that, the hash generator is gone and only your password works.
+   Passkeys are registered per-device after a successful password login.
+   ════════════════════════════════════════════════════════════════════════ */
+
+// ── Replace 'setup' with your generated hash after step 3 above ────────
+const OWNER_PASSWORD_HASH = 'setup';
+// ───────────────────────────────────────────────────────────────────────
+
+const PASSKEY_STORE_KEY = 'pr_passkey_v1';
+const SESSION_KEY       = 'pr_session_v1';
+const PW_SALT           = 'projection-room-v1:';
+
+const getPasskeyId = () => localStorage.getItem(PASSKEY_STORE_KEY);
+const setPasskeyId = (id) => localStorage.setItem(PASSKEY_STORE_KEY, id);
+const isAuthed     = ()  => sessionStorage.getItem(SESSION_KEY) === '1';
+const markAuthed   = ()  => sessionStorage.setItem(SESSION_KEY, '1');
+
+async function sha256hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(PW_SALT + str));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+const b64enc = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const b64dec = (s)   => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+const passkeyAvailable = () => typeof PublicKeyCredential !== 'undefined' &&
+  typeof navigator.credentials?.create === 'function';
+
+async function registerPasskey() {
+  const cred = await navigator.credentials.create({
+    publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: { name: 'The Projection Room', id: window.location.hostname },
+      user: { id: new Uint8Array([1]), name: 'owner', displayName: 'Owner' },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', residentKey: 'preferred', userVerification: 'preferred' },
+      timeout: 60000,
+    },
+  });
+  return b64enc(cred.rawId);
+}
+
+async function authenticatePasskey(credId) {
+  await navigator.credentials.get({
+    publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rpId: window.location.hostname,
+      allowCredentials: credId
+        ? [{ type: 'public-key', id: b64dec(credId), transports: ['internal', 'hybrid'] }]
+        : [],
+      userVerification: 'preferred',
+      timeout: 60000,
+    },
+  });
+}
+
+/* ── overlay ──────────────────────────────────────────────────────────── */
+
+function showAuthOverlay() {
+  const card    = document.getElementById('authCard');
+  const overlay = document.getElementById('authOverlay');
+  card.innerHTML = (OWNER_PASSWORD_HASH === 'setup') ? buildHashGenHTML() : buildLoginHTML();
+  overlay.removeAttribute('hidden');
+  requestAnimationFrame(() => overlay.classList.add('is-open'));
+  if (OWNER_PASSWORD_HASH === 'setup') wireHashGenUI();
+  else wireLoginUI();
+}
+
+function hideAuthOverlay() {
+  const overlay = document.getElementById('authOverlay');
+  overlay.classList.remove('is-open');
+  setTimeout(() => overlay.setAttribute('hidden', ''), 500);
+}
+
+async function onAuthSuccess() {
+  markAuthed();
+  hideAuthOverlay();
+  try { await loadDb(); render(); } catch (e) {
+    $('.stage').innerHTML = `<div class="empty-state"><p class="empty-title">Couldn't reach the projector.</p><p class="empty-sub">${esc(e.message)}</p></div>`;
+  }
+  // Offer passkey registration on this device if not already set up
+  if (!getPasskeyId() && passkeyAvailable()) offerPasskeyRegistration();
+}
+
+/* ── hash generator (only shown while OWNER_PASSWORD_HASH === 'setup') ── */
+
+function buildHashGenHTML() {
+  return `
+    <div class="auth-reel">${icon('reel')}</div>
+    <p class="auth-kicker"><span class="dot"></span> one-time setup</p>
+    <h1 class="auth-title">Generate your<br><em>access hash</em></h1>
+    <p class="auth-sub">Enter a password, copy the hash, paste it into <code style="font-family:var(--mono);color:var(--amber);font-size:12px">app.js</code>, and redeploy. This screen disappears after that.</p>
+    <div class="auth-pw-fields">
+      <input class="input auth-input" id="authPw1" type="password" placeholder="Choose a password (min 8 chars)" autocomplete="new-password"/>
+    </div>
+    <button class="btn btn--amber btn--block" id="authGenBtn">${icon('sparkle')}<span>Generate hash</span></button>
+    <div id="authHashResult" hidden style="margin-top:18px;text-align:left">
+      <p style="font-family:var(--mono);font-size:11px;color:var(--paper-faint);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px">Replace <code style="color:var(--amber)">'setup'</code> in app.js with:</p>
+      <div class="auth-hash-box">
+        <code class="auth-hash-val" id="authHashVal"></code>
+        <button class="btn btn--ghost btn--sm" id="authHashCopy">${icon('clip')}<span>Copy</span></button>
+      </div>
+      <p style="margin-top:10px;font-size:12px;color:var(--amber-deep)">Push &amp; redeploy — this screen becomes the login screen.</p>
+    </div>
+    <p class="auth-err" id="authErr" aria-live="polite"></p>`;
+}
+
+function wireHashGenUI() {
+  const setErr = (msg) => { const el = document.getElementById('authErr'); if (el) el.textContent = msg; };
+  const doGen = async () => {
+    const pw = document.getElementById('authPw1').value;
+    if (!pw) { setErr('Enter a password first.'); return; }
+    if (pw.length < 8) { setErr('Password must be at least 8 characters.'); return; }
+    setErr('');
+    const hash = await sha256hex(pw);
+    document.getElementById('authHashVal').textContent = hash;
+    document.getElementById('authHashResult').removeAttribute('hidden');
+    document.getElementById('authHashCopy').onclick = async () => {
+      await navigator.clipboard.writeText(hash);
+      document.getElementById('authHashCopy').innerHTML = `${icon('check')}<span>Copied!</span>`;
+    };
+  };
+  document.getElementById('authGenBtn').onclick = doGen;
+  document.getElementById('authPw1').addEventListener('keydown', (e) => { if (e.key === 'Enter') doGen(); });
+}
+
+/* ── login UI ─────────────────────────────────────────────────────────── */
+
+function buildLoginHTML() {
+  const hasPk = !!getPasskeyId() && passkeyAvailable();
+  return `
+    <div class="auth-reel">${icon('reel')}</div>
+    <p class="auth-kicker"><span class="dot"></span> private archive</p>
+    <h1 class="auth-title">The<br><em>Projection Room</em></h1>
+    <p class="auth-sub">Authentication required to enter.</p>
+    ${hasPk ? `<button class="btn btn--amber btn--block" id="authPasskeyBtn">${icon('check')}<span>Enter with passkey</span></button>
+    <p class="auth-divider">or enter password</p>` : ''}
+    <div class="auth-pw-wrap">
+      <input class="input auth-input" id="authPwInput" type="password" placeholder="Password" autocomplete="current-password"/>
+      <button class="btn btn--ghost btn--block" id="authPwBtn">${icon('check')}<span>Enter</span></button>
+    </div>
+    <p class="auth-err" id="authErr" aria-live="polite"></p>`;
+}
+
+function wireLoginUI() {
+  const passkeyId = getPasskeyId();
+  const setErr    = (msg) => { const el = document.getElementById('authErr'); if (el) el.textContent = msg; };
+
+  const pkBtn = document.getElementById('authPasskeyBtn');
+  if (pkBtn) pkBtn.onclick = async () => {
+    pkBtn.disabled = true; setErr('');
+    try {
+      await authenticatePasskey(passkeyId);
+      await onAuthSuccess();
+    } catch (e) {
+      if (e.name !== 'NotAllowedError') setErr(`Passkey failed: ${e.message}`);
+      pkBtn.disabled = false;
+    }
+  };
+
+  const pwInput = document.getElementById('authPwInput');
+  const pwBtn   = document.getElementById('authPwBtn');
+  const tryPw = async () => {
+    if (!pwInput.value) return;
+    setErr('');
+    const hash = await sha256hex(pwInput.value);
+    if (hash === OWNER_PASSWORD_HASH) {
+      await onAuthSuccess();
+    } else {
+      setErr('Incorrect password.');
+      pwInput.value = '';
+      pwInput.focus();
+    }
+  };
+  pwBtn.onclick = tryPw;
+  pwInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryPw(); });
+  if (pkBtn) setTimeout(() => pkBtn.click(), 350);
+  else setTimeout(() => pwInput.focus(), 200);
+}
+
+/* ── passkey offer (toast shown after first successful password auth) ─── */
+
+function offerPasskeyRegistration() {
+  const wrap = document.createElement('div');
+  wrap.className = 'toast toast--info auth-pk-offer';
+  wrap.innerHTML = `${icon('check')}<span>Register a passkey for quicker access on this device?</span>
+    <button class="btn btn--amber btn--sm" id="offerPkYes">Register</button>
+    <button class="icon-btn" id="offerPkNo">${icon('x')}</button>`;
+  document.getElementById('toasts').appendChild(wrap);
+  document.getElementById('offerPkNo').onclick  = () => wrap.remove();
+  document.getElementById('offerPkYes').onclick = async () => {
+    wrap.remove();
+    try {
+      const id = await registerPasskey();
+      setPasskeyId(id);
+      toast('Passkey registered — tap to enter next time.', 'ok');
+    } catch (e) {
+      if (e.name !== 'NotAllowedError') toast(`Passkey registration failed: ${e.message}`, 'err');
+    }
+  };
+}
+
+/* ════════════════════════════════════════════════════════════════════════
    EVENTS + INIT
    ════════════════════════════════════════════════════════════════════════ */
 function wireGlobal() {
@@ -1087,6 +1296,7 @@ function wireGlobal() {
 
 async function init() {
   wireGlobal();
+  if (!LOCAL_SERVER && !isAuthed()) { showAuthOverlay(); return; }
   try {
     await loadDb();
     render();
